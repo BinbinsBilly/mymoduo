@@ -27,7 +27,7 @@ namespace net
 
         using ChannelList = std::vector<Channel*>;  
 
-        ~Poller() = default;
+        virtual ~Poller() = default;
 
         virtual base::TimeStamp Poll(int timeoutms, ChannelList& activeChannels) = 0;
 

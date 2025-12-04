@@ -102,6 +102,10 @@ void TcpClient::removeConnection()
         if(tcpConnetion_)
         {
             conntemp = std::move(tcpConnetion_);
+            if(tcpConnetion_)
+            {
+                tcpConnetion_.reset();
+            }
         }
     }
     // Only schedule connectDestroyed if we actually have a connection.

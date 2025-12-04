@@ -63,7 +63,11 @@ namespace net
     EventLoop::~EventLoop()
     {
         LOG_DEBUG << "EventLoop::~EventLoop - EventLoop destructed in thread " << CurrentThread::tidString();
-        wakeupChannel_->disableAll();
+        if(!wakeupChannel_->isNoneEvent())
+        {
+            // LOG_DEBUG << "EventLoop::~EventLoop - wakeupChannel is NoneEvent, no need to remove";
+            wakeupChannel_->disableAll();
+        }
         wakeupChannel_->remove();
         LOG_DEBUG << "EventLoop::~EventLoop - wakeupChannel removed";
         ::close(wakeupfd_);
@@ -131,6 +135,7 @@ namespace net
         return timerQueue_->addTimer(std::move(cb), time, 0);
     }
     
+    //interval(s)
     int64_t EventLoop::runEvery(double interval, TimerCb cb)
     {
         // 第一次触发在 interval 之后

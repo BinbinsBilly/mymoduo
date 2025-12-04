@@ -15,6 +15,7 @@ add_library(mymoduo_net
     EventLoopThreadPool.cc
     TcpConn.cc
     TcpServer.cc
+    HeartBeat.cc
 )
 target_include_directories(mymoduo_net PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

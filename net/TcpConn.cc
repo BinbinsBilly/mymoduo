@@ -51,9 +51,12 @@ namespace mymoduo :: net
         {
             connectionCb_(shared_from_this());
         }
+        if(heartBeatUpdateCb_)
+        {
+            heartBeatUpdateCb_(shared_from_this());
+        }
     }
 
-    //test
     void TcpConn::connectDestroyed()
     {
         LOG_DEBUG << "TcpConn::connectDestroyed - connection";
@@ -64,16 +67,24 @@ namespace mymoduo :: net
         }
         if(connChannel_)
         {
-            connChannel_->disableAll();  // 清理工作: 取消对 fd 的所有事件
+            if(!connChannel_->isNoneEvent())
+            {
+                connChannel_->disableAll();  // 清理工作: 取消对 fd 的所有事件
+            }
             LOG_DEBUG << "TcpConnection channel - disableAll called";
             if(connectionCb_)
             {
                 connectionCb_(shared_from_this());
+            }        
+            if(heartBeatRemoveCb_)
+            {
+                heartBeatRemoveCb_(shared_from_this());
             }
             connChannel_->remove();
             connChannel_.reset();
         }
         LOG_DEBUG << "TcpConnChannel removed from loop";
+        //for test
     }
 
     void TcpConn::send(const void* data, size_t len)
@@ -139,6 +150,10 @@ namespace mymoduo :: net
             {
                 messageCb_(shared_from_this(), &inputBuffer_, recvTime);
             }
+            if(heartBeatUpdateCb_)
+            {
+                heartBeatUpdateCb_(shared_from_this());
+            }
         }else if(n == 0)
         {
             //连接关闭, 我们要做的清理工作
@@ -164,7 +179,6 @@ namespace mymoduo :: net
                     connChannel_->disableWrite();
                     if(writeCompleteCb_)
                     {
-
                         //这里能否再起一个线程执行复杂的回调函数?
                         //在加入一个线程池专门处理回调函数?
 
@@ -201,6 +215,10 @@ namespace mymoduo :: net
         }
         if (handleCloseCb_) {
             handleCloseCb_(guardThis);
+        }
+        if(heartBeatRemoveCb_)
+        {
+            heartBeatRemoveCb_(guardThis);
         }
     }
 

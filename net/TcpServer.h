@@ -7,6 +7,7 @@
 #include "Acceptor.h"
 #include "Callbacks.h"
 #include "Logging.h"
+#include "HeartBeat.h"
 
 
 namespace mymoduo
@@ -25,7 +26,7 @@ public:
     };
 
 
-    TcpServer(EventLoop* loop, const InetAddress& linstenaddr, const std::string &name,
+    TcpServer(EventLoop* loop, const InetAddress& linstenaddr, const std::string &name, int slots = 3600, double timeout = 120,
              Option opt = Option::kNoReuse);
     ~TcpServer();
 
@@ -70,6 +71,9 @@ private:
     std::atomic<int32_t> started_;
 
     int nextConnId_;
+
+    //心跳检测
+    std::unique_ptr<HeartBeat> heartBeat_;
 
     ConnectionMap connectionMap_;
 };

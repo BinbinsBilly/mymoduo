@@ -59,6 +59,15 @@ public:
         highWaterMarkCb_ = std::move(cb);
         highWaterMark_ = highWaterMark;
     }
+    void setHeartBeatUpdateCb(const HeartBeatUpdateCb& cb)
+    {
+        heartBeatUpdateCb_ = std::move(cb);
+    }
+    void setHeartBeatRemoveCb(const HeartBeatRemoveCb& cb)
+    {
+        heartBeatRemoveCb_ = std::move(cb);
+    }
+
     void setHandleCloseCb(const TcpHandleCloseCb& cb) { handleCloseCb_ = std::move(cb); }
 
     void connectEstablished(); //与客户端连接已经建立完成 开启channel
@@ -93,6 +102,9 @@ private:
     TcpWriteCompleteCb writeCompleteCb_;
     TcpHandleCloseCb handleCloseCb_;
     HighWaterMarkCb highWaterMarkCb_;
+    HeartBeatUpdateCb heartBeatUpdateCb_;
+    HeartBeatRemoveCb heartBeatRemoveCb_;
+    
     size_t highWaterMark_;
 
     Buffer inputBuffer_;

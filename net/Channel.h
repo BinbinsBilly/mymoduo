@@ -66,7 +66,7 @@ public:
     void enableWrite() { addEvent(Event::Write); } 
     void disableRead() { removeEvent(Event::Read); }
     void disableWrite() { removeEvent(Event::Write); }
-    void disableAll() { event_ = static_cast<int>(Event::None); update(); }
+    void disableAll() { event_ = static_cast<uint32_t>(Event::None); update(); }
     
     bool isReading() const noexcept { return (event_ & kReadEvent) != 0; }
     bool isWriting() const noexcept { return (event_ & kWriteEvent) != 0; }

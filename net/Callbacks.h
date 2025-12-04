@@ -23,6 +23,8 @@ using TcpMessageCb = std::function<void(const TcpConnPtr&, Buffer*, base::TimeSt
 using TcpWriteCompleteCb = std::function<void(const TcpConnPtr&)>;
 using HighWaterMarkCb = std::function<void(const TcpConnPtr&, size_t)>;
 using TcpHandleCloseCb = std::function<void(const TcpConnPtr&)>;
+using HeartBeatUpdateCb = std::function<void(const TcpConnPtr&)>;
+using HeartBeatRemoveCb = std::function<void(const TcpConnPtr&)>;
 
 } // namespace net
 } // namespace mymoduo

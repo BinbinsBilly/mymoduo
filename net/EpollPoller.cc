@@ -66,6 +66,14 @@ namespace net
         int fd = channel.fd();
 
         channels_.erase(fd);    //从channels中删除
+        if(channel.status() == static_cast<int>(ChannelStatus::New)
+          || channel.status() == static_cast<int>(ChannelStatus::Deleted))
+        {
+
+        channel.setstatus(ChannelStatus::New);  // 修改channel状态
+            // LOG_DEBUG << "EpollPoller::removeChannel - channel not added, no need to remove";
+            return; //未添加或者已经被删除不需要删除
+        }
         update(EpollOp::Delete, channel);   // 从监听中摘除
         channel.setstatus(ChannelStatus::New);  // 修改channel状态
     }
