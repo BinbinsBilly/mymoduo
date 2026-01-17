@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../base/noncopyable.h"
+#include "noncopyable.h"
 #include "socket.h"
 #include "InetAddress.hpp"
 #include "EventLoop.h"

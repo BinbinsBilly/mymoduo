@@ -11,10 +11,10 @@
 
 #pragma once 
 
-#include "../base/noncopyable.h"
-#include "../base/TimeStamp.h"
+#include "noncopyable.h"
+#include "TimeStamp.h"
 #include "Poller.h"
-#include "../base/Logging.h"
+#include "Logging.h"
 // Forward declare EventLoop instead of including to reduce cycles
 namespace mymoduo { namespace net { class EventLoop; } }
 

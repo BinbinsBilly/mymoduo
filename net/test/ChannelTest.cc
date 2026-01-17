@@ -1,8 +1,8 @@
 // ChannelTest.cc
 // 拆分多个独立测试函数：初始状态、读写事件使能与关闭、disableAll、remove、tie 与回调触发。
 
-#include "../Channel.h"
-#include "../EventLoop.h"
+#include "Channel.h"
+#include "EventLoop.h"
 #include <cassert>
 #include <sys/eventfd.h>
 #include <unistd.h>

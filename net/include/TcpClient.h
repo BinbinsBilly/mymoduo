@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../base/noncopyable.h"
-#include "./Connector.h"
+#include "noncopyable.h"
+#include "Connector.h"
 
 #include <optional>
 #include <shared_mutex>

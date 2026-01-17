@@ -17,8 +17,14 @@ add_library(mymoduo_net
     TcpServer.cc
     HeartBeat.cc
 )
+# target_include_directories(mymoduo_net PUBLIC
+#     ${CMAKE_CURRENT_SOURCE_DIR}/include
+#     ${CMAKE_SOURCE_DIR}/base/include
+# )
+
 target_include_directories(mymoduo_net PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/base
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/base/include>
+    $<INSTALL_INTERFACE:include>
 )
 

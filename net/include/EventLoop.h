@@ -9,11 +9,11 @@
 
 #pragma once
 
-#include "../base/TimeStamp.h"
+#include "TimeStamp.h"
 #include "Channel.h"
 #include "Poller.h"
 #include "EpollPoller.h"
-#include "../base/CurrentThread.h"
+#include "CurrentThread.h"
 #include "Callbacks.h"
 #include "TimerQueue.h"
 

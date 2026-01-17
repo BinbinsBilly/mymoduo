@@ -13,10 +13,10 @@
 #pragma once
 
 #include "timer.h"
-#include "../base/TimeStamp.h"
-#include "../base/noncopyable.h"
+#include "TimeStamp.h"
+#include "noncopyable.h"
 #include "Callbacks.h"
-#include "../base/Logging.h"
+#include "Logging.h"
 namespace mymoduo { namespace net { class EventLoop; class Channel; } }
 
 #include <set>

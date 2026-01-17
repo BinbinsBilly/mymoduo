@@ -15,6 +15,24 @@ add_subdirectory(base/test)
 add_subdirectory(net/test)
 add_subdirectory(example)
 
+# 3. 安装目标
+install(TARGETS mymoduo_net mymoduo_base
+    EXPORT mymoduo-targets
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include  # ← 自动传递头文件路径
+)
+# 4. 安装头文件
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include DESTINATION include)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/base/include DESTINATION include)
+# 5. 导出配置（这个会自动生成正确的配置）
+install(EXPORT mymoduo-targets
+    FILE mymoduo-config.cmake
+    NAMESPACE mymoduo::
+    DESTINATION /opt/mymoduo
+)
+
 # 聚合入口（可选）
 # add_executable(mymoduo_test test.cc)
 # target_include_directories(mymoduo_test PRIVATE

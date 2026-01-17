@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../base/noncopyable.h"
-#include "../base/TimeStamp.h"
+#include "noncopyable.h"
+#include "TimeStamp.h"
 #include "Callbacks.h"
 
 #include <chrono>
