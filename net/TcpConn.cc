@@ -61,10 +61,11 @@ namespace mymoduo :: net
     {
         LOG_DEBUG << "TcpConn::connectDestroyed - connection";
         // Ensure channel is disabled and removed regardless of previous state.
-        if(state_ != StateE::kDisconnected)
-        {
-            setState(StateE::kDisconnected);
-        }
+            bool wasConnected = (state_ == StateE::kConnected);
+            if(state_ != StateE::kDisconnected)
+            {
+                setState(StateE::kDisconnected);
+            }
         if(connChannel_)
         {
             if(!connChannel_->isNoneEvent())
@@ -72,35 +73,42 @@ namespace mymoduo :: net
                 connChannel_->disableAll();  // 清理工作: 取消对 fd 的所有事件
             }
             LOG_DEBUG << "TcpConnection channel - disableAll called";
-            if(connectionCb_)
-            {
-                connectionCb_(shared_from_this());
-            }        
-            if(heartBeatRemoveCb_)
-            {
-                heartBeatRemoveCb_(shared_from_this());
-            }
             connChannel_->remove();
             connChannel_.reset();
         }
+            if(wasConnected)
+            {
+                if(connectionCb_)
+                {
+                    connectionCb_(shared_from_this());
+                }
+                if(heartBeatRemoveCb_)
+                {
+                    heartBeatRemoveCb_(shared_from_this());
+                }
+            }
         LOG_DEBUG << "TcpConnChannel removed from loop";
         //for test
     }
 
     void TcpConn::send(const void* data, size_t len)
     {
-        const std::string* msg = static_cast<const std::string*>(data);
-        if(state_ == StateE::kConnected)
-        {
-            if(loop_->isInLoopThread())
+            if(state_ == StateE::kConnected)
             {
-                sendInLoop(data, len);
-            }else{
-                loop_->queueInLoop([this, msg, len](){
-                    this->sendInLoop(msg->c_str(), len);
-                });
+                if(loop_->isInLoopThread())
+                {
+                    sendInLoop(data, len);
+                }else{
+                    auto self = shared_from_this();
+                    auto message = std::make_shared<std::string>(
+                        static_cast<const char*>(data),
+                        len
+                    );
+                    loop_->queueInLoop([self, message](){
+                        self->sendInLoop(message->data(), message->size());
+                    });
+                }
             }
-        }
     }
     void TcpConn::send(const std::string& msg)
     {
@@ -110,8 +118,9 @@ namespace mymoduo :: net
             {
                 sendInLoop(msg.c_str(), msg.size());
             }else{
-                loop_->queueInLoop([this, msg](){
-                    sendInLoop(msg.c_str(), msg.size());
+                auto self = shared_from_this();
+                loop_->queueInLoop([self, msg](){
+                    self->sendInLoop(msg.c_str(), msg.size());
                 });
             }
         }
@@ -122,8 +131,9 @@ namespace mymoduo :: net
         if(state_ == StateE::kConnected)
         {
             setState(StateE::kDisconnecting);
-            loop_->queueInLoop([this](){
-                this->shutdownInLoop();
+            auto self = shared_from_this();
+            loop_->queueInLoop([self](){
+                self->shutdownInLoop();
             });
         }
     }
@@ -184,9 +194,11 @@ namespace mymoduo :: net
 
                         //这里其实可以直接调回调了
                         //但可能出于运行效率考虑, 还是放到pendingFunctors中异步执行
-                        decltype(auto) self = shared_from_this();
-                        loop_->queueInLoop([self, this](){
-                            writeCompleteCb_(self);
+                        auto self = shared_from_this();
+                        loop_->queueInLoop([self](){
+                            if(self->writeCompleteCb_) {
+                                self->writeCompleteCb_(self);
+                            }
                         });
                     }
                 }
@@ -244,44 +256,49 @@ namespace mymoduo :: net
         size_t remaining{len};
         int faultError{0};
 
-        if(state_ == StateE::kDisconnecting || (state_ == StateE::kDisconnected))
+        if(state_ == StateE::kDisconnected)
         {
-            LOG_ERROR << "disconnecting or disconneted";
+            LOG_ERROR << "sendInLoop on disconnected connection";
+            return;
         }
-        if(!connChannel_->isWriting() || outputBuffer_.readableBytes() == 0 || remaining == 0)
+        if(!connChannel_)
         {
-            LOG_ERROR << "nothing to write, readable bytes = 0";
-        }else{
+            LOG_ERROR << "sendInLoop without channel";
+            return;
+        }
+        if(remaining == 0)
+        {
+            return;
+        }
+
+        if(!connChannel_->isWriting() && outputBuffer_.readableBytes() == 0)
+        {
             nwrote = ::write(connChannel_->fd(), data, len);
             if(nwrote >= 0) //理论上来说不会等于0
             {
-                //记录还有多少未写入的数据
                 remaining -= nwrote;
                 if(remaining == 0 && writeCompleteCb_)
                 {
-                    decltype(auto) guardThis = shared_from_this();
-                    loop_->queueInLoop([this, guardThis](){
-                        this->writeCompleteCb_(guardThis);
+                    auto guardThis = shared_from_this();
+                    loop_->queueInLoop([guardThis](){
+                        if(guardThis->writeCompleteCb_) {
+                            guardThis->writeCompleteCb_(guardThis);
+                        }
                     });
                 }
             }else{ // nwrote < 0
-                //注意写入部分的情况不会返回0也不会设置errno
-                //只有当下次进入时才会返回-1并设置errno为EAGAIN
                 nwrote = 0;
                 faultError = errno;
-                if(faultError != EAGAIN && faultError != EINTR)  //n < 0 && errno == EAGAIN：缓冲区满
+                if(faultError != EAGAIN && faultError != EINTR)
                 {
-                    //真错误
                     LOG_ERROR << "TcpConn::sendInLoop - write error: " << strerror(faultError);
                     if(faultError == EPIPE || faultError == ECONNRESET)
                     {
-                        //对端关闭连接
                         handleClose();
                     }
                 }else{
-                    //缓冲区满了  或   被信号中断
                     LOG_INFO << "TcpConn::sendInLoop - write later";
-                    faultError = 0; //不是错误
+                    faultError = 0;
                 }
             }
         }
@@ -294,9 +311,11 @@ namespace mymoduo :: net
                 && highWaterMarkCb_)
             {
                 size_t newLen = oldLen + remaining;
-                decltype(auto) guardThis = shared_from_this();
-                loop_->queueInLoop([this, guardThis, newLen](){
-                    highWaterMarkCb_(guardThis, newLen);
+                auto guardThis = shared_from_this();
+                loop_->queueInLoop([guardThis, newLen](){
+                    if(guardThis->highWaterMarkCb_) {
+                        guardThis->highWaterMarkCb_(guardThis, newLen);
+                    }
                 });
             }
             // 剩余数据添加到outputBuffer_中 等待下一次可写事件(可写缓冲区0->1)触发再写入内核缓冲区

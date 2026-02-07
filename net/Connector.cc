@@ -35,27 +35,45 @@ Connector::Connector(EventLoop* loop, const InetAddress& serverAddr, int retryDe
 Connector::~Connector()
 {
     LOG_DEBUG << "Connector::~Connector - Connector destructed";
-    if(channel_)
+    // channel_ is invalid, we can not use shared_from_this() in destructor
+    // we should remove channel directly
+    Channel* rawChannel = channel_.release(); // release ownership
+    if(rawChannel)
     {
         // Must close the socket if we are destroying the connector while it has an active channel/socket
-        int sockfd = channel_->fd();
+        int sockfd = rawChannel->fd();
         
-        // channel_ is invalid, we can not use shared_from_this() in destructor
-        // we should remove channel directly
-        Channel* rawChannel = channel_.release(); // release ownership
+        // Ensure channel is cleaned up properly.
+        // If we are in the loop thread, we disable and remove immediately, but queue deletion
+        // to handle the case where we might be inside a Channel callback.
         if(loop_ && loop_->isInLoopThread())
         {
-            rawChannel->disableAll();
-            rawChannel->remove();
-            delete rawChannel;
-            // loop_->removeChannel(rawChannel); // Channel::remove calls loop->removeChannel
-        }else if(loop_){
-            loop_->runInLoop([rawChannel](){
+            if(!rawChannel->isNoneEvent())
+            {
                 rawChannel->disableAll();
+            }
+            rawChannel->remove();
+            
+            // Defer deletion to avoid use-after-free if we assume we might be in a callback
+            loop_->queueInLoop([rawChannel](){
+                delete rawChannel;
+            });
+        }
+        else if(loop_)
+        {
+            // If not in loop thread, post the whole cleanup to the loop.
+            loop_->runInLoop([rawChannel](){
+                if(!rawChannel->isNoneEvent())
+                {
+                    rawChannel->disableAll();
+                }
                 rawChannel->remove();
                 delete rawChannel;
             });
-        } else {
+        } 
+        else 
+        {
+             // Loop is gone or null, just delete.
              delete rawChannel;
         }
         ::close(sockfd);
@@ -233,7 +251,10 @@ int Connector::removeAndResetChannel()
     if (!channel_) return -1;
 
     int sockfd = channel_->fd();
-    channel_->disableAll();
+    if(!channel_->isNoneEvent())
+    {
+        channel_->disableAll();
+    }
     channel_->remove();
     // Move channel ownership to pending functor. 
     // Use shared_ptr because std::function requires copyable callable.
