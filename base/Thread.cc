@@ -1,5 +1,5 @@
 #include "Thread.h"
-
+#include <exception>
 
 namespace mymoduo
 {
@@ -97,11 +97,15 @@ namespace base
                 func_();
                 CurrentThread::setName("finished");
             }
+            catch(const std::exception& ex)
+            {
+                CurrentThread::setName("crashed");
+                LOG_ERROR << "Thread crashed, exception: " << ex.what();
+            }
             catch(...)
             {
                 CurrentThread::setName("crashed");
-                LOG_ERROR << "Thread crashed";
-                threadIdPromise.set_exception(std::current_exception());
+                LOG_ERROR << "Thread crashed, unknown exception";
             }
         });
         //这里还可以使用std::latch实现线程ID的同步获取

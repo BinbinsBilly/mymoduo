@@ -1,67 +1,9 @@
-# 编译输出
-*.o
-*.so
-*.a
-*.lib
-*.dll
-*.exe
-*.out
-*.obj
-*.ilk
-*.pdb
-*.exp
-*.dSYM/
-
-# 构建目录
+.cache/
 build/
-Debug/
-Release/
-x64/
-x86/
 CMakeFiles/
 CMakeCache.txt
+CTestTestfile.cmake
 Makefile
 cmake_install.cmake
-*.cmake
-!.cmake-version
-
-# IDE文件
 .vscode/
-.idea/
-.vs/           # 添加这个，忽略Visual Studio相关文件
-*.swp
-*.swo
-*.sublime-*
-
-# 依赖管理
-deps/
-third_party/
-conaninfo.txt
-conanbuildinfo.txt
-
-# 日志文件
-*.log
-*.tmp
-
-# 临时文件
-*.tmp
-*.temp
-*~
-
-# 平台特定
-.DS_Store
-Thumbs.db
-
-# 测试相关
-*.gcda
-*.gcno
-*.gcov
-
-# 包管理
-*.tar.gz
-*.zip
-
-# 文档生成
-doxygen/
-html/
-latex/
+*.o

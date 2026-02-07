@@ -62,6 +62,7 @@ namespace net
             // invalid poll fd; optionally log
         }
         eventHandeling_ = true;
+        //使用guard 析构时更新eventHandeling_的状态
         struct EventGuard { bool &flag; explicit EventGuard(bool &f): flag(f) {} ~EventGuard(){ flag = false; } } guard(eventHandeling_);
         // Error handling first
         if(revent_ & (POLLNVAL | POLLERR))

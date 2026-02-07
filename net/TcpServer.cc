@@ -42,9 +42,10 @@ namespace net
         LOG_INFO << "TcpServer::~TcpServer - server " << name_ << " destructing";
         for(auto& item : connectionMap_)
         {
-            TcpConnPtr conn = item.second;  // 将类成员中的智能指针转移为局部变量的智能指针
+            TcpConnPtr conn = item.second;//使用栈上变量增加引用数
             item.second.reset();          // 重置类成员中的智能指针，释放对连接对象的所有权
             //conn所属的ioLoop中执行连接销毁
+            // lambada捕获智能指针会延长智能指针的生命周期
             conn->getLoop()->runInLoop([conn](){
                 conn->connectDestroyed();
             });
@@ -62,7 +63,7 @@ void TcpServer::start()
     if(started_++ == 0)
     {
         threadPool_->start(threadInitCb_);  //启动底层线程池
-        loop_->runInLoop([this](){         //开启监听新连接
+        loop_->runInLoop([this](){   //baseloop开始监听连接
             acceptor_->listen();
         });
     }
@@ -72,6 +73,7 @@ void TcpServer::start()
 void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
 {
     loop_->assertInLoopThread();
+    //轮询分配连接到下一个io线程
     EventLoop* ioLoop = threadPool_->getNextLoop();
     char buf[64]{0};
     ::snprintf(buf, sizeof(buf), "%s#%d", ipPort_.c_str(), nextConnId_);
@@ -80,7 +82,7 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
 
     LOG_INFO << "add Connection, conn name = " << connName << "Port = " << ipPort_ ;
     
-
+    //获取本端地址信息
     sockaddr_in local;
     memset(&local, 0, sizeof(local));    
     socklen_t socklen = sizeof(local);
@@ -90,6 +92,8 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
     }
     InetAddress localaddr(local);
 
+    //TcpConn维护一个Conn
+    //读写都是通过Connection来做的
     TcpConnPtr newconn= std::make_shared<TcpConn>( ioLoop,
                                                   connName,
                                                   std::move(connSocket),
@@ -113,7 +117,7 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
         this->removeConnection(conn);
     });
 
-    //连接建立
+    //将该连接加入到IO线程的循环中, 监听读事件
     ioLoop->runInLoop([newconn](){
         newconn->connectEstablished();
     });

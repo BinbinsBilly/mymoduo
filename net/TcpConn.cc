@@ -8,14 +8,14 @@ namespace mymoduo :: net
         Socket&& connSocket,
         const InetAddress& localAddr,
         const InetAddress& peerAddr)
-        :loop_(loop)
+        :loop_(loop)//该Conn属于的io线程
         ,state_(StateE::kConnecting)
         ,name_(name)
         ,connSocket_(std::make_unique<Socket>(std::move(connSocket)))
         ,connChannel_(std::make_unique<Channel>(loop, connSocket_->fd()))
         ,localAddr_(localAddr)
         ,peerAddr_(peerAddr)
-        ,highWaterMark_(64 * 1024 * 1024) //默认64MB
+        ,highWaterMark_(64 * 1024 * 1024)   //默认64MB
         ,inputBuffer_(64 * 1024)  //64KB
         ,outputBuffer_(64 * 1024) //64KB
     {

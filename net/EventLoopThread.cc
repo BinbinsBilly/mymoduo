@@ -27,14 +27,17 @@ namespace net
             cb_(&loop);
         }
 
-        
+        LOG_DEBUG << "EventLoopThread" << "[Name]: "<< thread_.name() << "- EventLoop thread started in thread "
+                  << CurrentThread::tidString();
         //for test
-        std::thread::id tid = CurrentThread::threadId();
-        std::cout<< "EventLoopThread::threadFunc() - EventLoop thread started in thread "
-                 << tid << std::endl;
+        // std::thread::id tid = CurrentThread::threadId();
+        // std::cout<< "EventLoopThread::threadFunc() - EventLoop thread started in thread "
+        //          << tid << std::endl;
 
         loop.loop(); // 事件循环 一去不返
-        LOG_DEBUG << "EventLoopThread::threadFunc() - EventLoop thread exit";
+        LOG_DEBUG << "EventLoopThread" << "[Name]: "<< thread_.name() << "- EventLoop thread exit in thread "
+                  << CurrentThread::tidString();
+        //for test
     }
 
     //开启线程 线程中执行 Eventloop线程函数

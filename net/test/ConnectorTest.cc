@@ -67,12 +67,13 @@ static void testSuccessfulConnect() {
 
     mymoduo::net::EventLoop loop; // construct and run in same thread
     InetAddress serverAddr(port, true); // loopback
-    Connector connector(&loop, serverAddr);
-    connector.setConnetionCb([&](int sockfd){
+    // Connector should be managed by shared_ptr to use shared_from_this()
+    std::shared_ptr<Connector> connector = std::make_shared<Connector>(&loop, serverAddr);
+    connector->setConnetionCb([&](int sockfd){
         connectedSock.store(sockfd);
         loop.quit();
     });
-    connector.start();
+    connector->start();
     loop.runAfter(1.0, [&](){ // safety timeout
         if(connectedSock.load() < 0) { loop.quit(); }
     });
@@ -95,13 +96,13 @@ static void testConnectionRefusedRetry() {
     mymoduo::net::EventLoop loop;
     InetAddress addr(port, true);
     // Use small initial retry delay to exercise retry logic quickly.
-    Connector connector(&loop, addr, 100); // 100ms initial retry
-    connector.setConnetionCb([&](int sockfd){
+    std::shared_ptr<Connector> connector = std::make_shared<Connector>(&loop, addr, 100); // 100ms initial retry
+    connector->setConnetionCb([&](int sockfd){
         cbCount.fetch_add(1);
         ::close(sockfd);
         loop.quit();
     });
-    connector.start();
+    connector->start();
     // Run loop for a short time (< first few retries) then quit.
     loop.runAfter(0.5, [&](){ loop.quit(); });
     loop.loop();
@@ -118,14 +119,14 @@ static void testStopBeforeConnect() {
     std::atomic<int> cbCount{0};
     mymoduo::net::EventLoop loop;
     InetAddress addr(port, true);
-    Connector connector(&loop, addr, 100);
-    connector.setConnetionCb([&](int sockfd){
+    std::shared_ptr<Connector> connector = std::make_shared<Connector>(&loop, addr, 100);
+    connector->setConnetionCb([&](int sockfd){
         cbCount.fetch_add(1);
         ::close(sockfd);
         loop.quit();
     });
-    connector.start();
-    connector.stop(); // immediately stop
+    connector->start();
+    connector->stop(); // immediately stop
     loop.runAfter(0.4, [&](){ loop.quit(); });
     loop.loop();
     assert(cbCount.load() == 0);
@@ -143,12 +144,12 @@ static void testRestart() {
     int serverFd{-1};
     mymoduo::net::EventLoop loop;
     InetAddress addr(port, true);
-    Connector connector(&loop, addr, 50); // fast retry
-    connector.setConnetionCb([&](int sockfd){
+    std::shared_ptr<Connector> connector = std::make_shared<Connector>(&loop, addr, 50); // fast retry
+    connector->setConnetionCb([&](int sockfd){
         connectedSock.store(sockfd);
         loop.quit();
     });
-    connector.start();
+    connector->start();
     // After some retries, start a server and then restart connector.
     loop.runAfter(0.12, [&](){
         // Turn the reserved socket into a listening socket.
@@ -158,7 +159,7 @@ static void testRestart() {
     });
 
     loop.runAfter(0.14, [&](){
-        connector.restart();
+        connector->restart();
     });
 
     loop.runAfter(0.6, [&](){ // safety timeout

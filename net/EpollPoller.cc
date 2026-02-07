@@ -36,7 +36,7 @@ namespace net
         }
         else if(eventNum == 0)
         {
-            LOG_INFO << "Poll: nothing happen\n";
+            LOG_DEBUG << "Poll: nothing happen\n";
         }
         else
         {
@@ -72,10 +72,10 @@ namespace net
 
         channel.setstatus(ChannelStatus::New);  // 修改channel状态
             // LOG_DEBUG << "EpollPoller::removeChannel - channel not added, no need to remove";
-            return; //未添加或者已经被删除不需要删除
+            return;                             //未添加或者已经被删除不需要删除
         }
-        update(EpollOp::Delete, channel);   // 从监听中摘除
-        channel.setstatus(ChannelStatus::New);  // 修改channel状态
+        update(EpollOp::Delete, channel);   // 从监听树中摘除
+        channel.setstatus(ChannelStatus::New);           // 修改channel状态
     }
 
     void EpollPoller::updateChannel(Channel& channel)

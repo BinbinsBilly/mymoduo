@@ -21,17 +21,42 @@ install(TARGETS mymoduo_net mymoduo_base
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include  # ← 自动传递头文件路径
+    INCLUDES DESTINATION include   # 给使用者自动传递 -I<prefix>/include
 )
-# 4. 安装头文件
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include DESTINATION include)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/base/include DESTINATION include)
-# 5. 导出配置（这个会自动生成正确的配置）
+
+# 4. 安装头文件（去掉双层 include）
+# 原：install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include DESTINATION include)
+# 改：把 include 目录下的“内容”拷到 <prefix>/include，而不是再套一层 include
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/base/include/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+
+# 5. 导出配置（不再硬编码 /opt/mymoduo）
 install(EXPORT mymoduo-targets
     FILE mymoduo-config.cmake
     NAMESPACE mymoduo::
-    DESTINATION /opt/mymoduo
+    DESTINATION lib/cmake/mymoduo   # 跟随 CMAKE_INSTALL_PREFIX
 )
+# # 3. 安装目标
+# install(TARGETS mymoduo_net mymoduo_base
+#     EXPORT mymoduo-targets
+#     ARCHIVE DESTINATION lib
+#     LIBRARY DESTINATION lib
+#     RUNTIME DESTINATION bin
+#     INCLUDES DESTINATION include  # ← 自动传递头文件路径
+# )
+# # 4. 安装头文件
+# install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include DESTINATION include)
+# install(DIRECTORY ${CMAKE_SOURCE_DIR}/base/include DESTINATION include)
+# # 5. 导出配置（这个会自动生成正确的配置）
+# install(EXPORT mymoduo-targets
+#     FILE mymoduo-config.cmake
+#     NAMESPACE mymoduo::
+#     DESTINATION /opt/mymoduo
+# )
 
 # 聚合入口（可选）
 # add_executable(mymoduo_test test.cc)

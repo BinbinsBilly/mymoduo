@@ -37,16 +37,28 @@ Connector::~Connector()
     LOG_DEBUG << "Connector::~Connector - Connector destructed";
     if(channel_)
     {
+        // Must close the socket if we are destroying the connector while it has an active channel/socket
+        int sockfd = channel_->fd();
+        
+        // channel_ is invalid, we can not use shared_from_this() in destructor
+        // we should remove channel directly
+        Channel* rawChannel = channel_.release(); // release ownership
         if(loop_ && loop_->isInLoopThread())
         {
-            channel_->disableAll();
-            channel_->remove();
-        }else{
-            auto self = shared_from_this();
-            loop_->runInLoop([self](){
-                self->removeAndResetChannel();
+            rawChannel->disableAll();
+            rawChannel->remove();
+            delete rawChannel;
+            // loop_->removeChannel(rawChannel); // Channel::remove calls loop->removeChannel
+        }else if(loop_){
+            loop_->runInLoop([rawChannel](){
+                rawChannel->disableAll();
+                rawChannel->remove();
+                delete rawChannel;
             });
+        } else {
+             delete rawChannel;
         }
+        ::close(sockfd);
     }
     LOG_DEBUG << "Connector::~Connector - Connector destructed done";
 }
@@ -56,7 +68,8 @@ void Connector::start()
     if(state_.load(std::memory_order_acquire) == StateE::kDisconnected)
     {
         connect_ = true;
-        loop_->runInLoop([this](){ this->startInLoop(); });
+        // Use shared_from_this to keep Connector alive during async call
+        loop_->runInLoop([self = shared_from_this()](){ self->startInLoop(); });
     }else{
         LOG_ERROR << "Connector unavaiable, state_ != kDisconnected ";
     }
@@ -78,6 +91,12 @@ void Connector::restart()
     LOG_DEBUG <<  "=========================================";
     LOG_DEBUG << "Connector::restart - Restarting connector";
     loop_->assertInLoopThread();
+    if(state_.load(std::memory_order_acquire) == StateE::kConnecting)
+    {
+        // Cleanup existing channel and socket
+        int sockfd = removeAndResetChannel();
+        ::close(sockfd);
+    }
     setState(StateE::kDisconnected);
     //重设retry时间为初始值
     retryDelayMs_.store(kInitRetryDelayMs, std::memory_order_release);
@@ -88,7 +107,8 @@ void Connector::restart()
 void Connector::stop()
 {
     connect_ = false;
-    loop_->runInLoop([this](){ this->stopInLoop(); });
+    // Use shared_from_this to keep Connector alive for the stop operation
+    loop_->runInLoop([self = shared_from_this()](){ self->stopInLoop(); });
 }
 void Connector::stopInLoop()
 {
@@ -151,8 +171,18 @@ void Connector::connecting(int sockfd)
     setState(StateE::kConnecting);
 
     channel_ = std::make_unique<Channel>(loop_, sockfd);
-    channel_->setWriteEventCb([this](){ this->handleWrite(); });
-    channel_->setErrorEventCb([this](){ this->handleError(); });
+    // Use weak_ptr for channel callbacks to prevent access to destroyed Connector
+    std::weak_ptr<Connector> weakSelf(shared_from_this());
+    channel_->setWriteEventCb([weakSelf](){ 
+        if(auto self = weakSelf.lock()) {
+            self->handleWrite(); 
+        }
+    });
+    channel_->setErrorEventCb([weakSelf](){ 
+        if(auto self = weakSelf.lock()) {
+            self->handleError(); 
+        }
+    });
 
     channel_->enableWrite();//连接建立
 }
@@ -164,6 +194,12 @@ void Connector::handleWrite()
         int savedError{0};
         //channle是一次性的，连接建立后就不需要了
         int sockfd = removeAndResetChannel(); //channel的销毁必须是在pendingfunctor中, 因为此时for(:activeChannel)
+        if (sockfd < 0) 
+        {
+            LOG_WARN << "Connector::handleWrite - channel already removed";
+            return;
+        }
+
         //非阻塞connect完成后，内核会发送一个写事件通知我们连接建立成功，或者连接失败
         //可写时间只代表连接完成, 成功或失败是未知的    
         //必须通过getsockopt获取SO_ERROR来判断连接是否成功
@@ -194,22 +230,27 @@ void Connector::handleWrite()
 int Connector::removeAndResetChannel()
 {
     loop_->assertInLoopThread();
+    if (!channel_) return -1;
+
     int sockfd = channel_->fd();
     channel_->disableAll();
     channel_->remove();
-    //我们不能在这里reset channel_, 
-    //因为当前handleWrite/handleError是在Poller的事件循环中调用的
-    //会导致容器遍历时，容器被修改，出现未定义行为
-    loop_->queueInLoop([this](){
-        this->resetChannel(); //在pendingFunctors中删除channel_
+    // Move channel ownership to pending functor. 
+    // Use shared_ptr because std::function requires copyable callable.
+    std::shared_ptr<Channel> guard(channel_.release());
+    loop_->queueInLoop([guard]() {
+        // Channel destructs when guard is destroyed
     });
+    // channel_ is now nullptr
+    
     LOG_DEBUG << "Connector channel removed and reset";
     return sockfd;
 }
 
 void Connector::resetChannel() 
 {
-    channel_.reset(); //channel_析构
+    // Deprecated/Unused with new removeAndResetChannel implementation
+    if(channel_) channel_.reset(); 
 }
 
 void Connector::handleError()
@@ -218,6 +259,7 @@ void Connector::handleError()
     if(state_.load(std::memory_order_acquire) == StateE::kConnecting)
     {
         int connsock = removeAndResetChannel();
+        if (connsock < 0) return;
         retry(connsock);
     }
 }
@@ -236,7 +278,14 @@ void Connector::retry(int sockfd)
                     << " in " << retryDelayMs_.load() << " milliseconds.";
             
             int delay = std::clamp(retryDelayMs_.load() * 2, kInitRetryDelayMs, kMaxRetryDelayMs);
-            loop_->runAfter(delay / 1000.0, [this]() { this->startInLoop(); });
+            
+            // Use weak_ptr for retry timer to prevent keeping Connector alive indefinitely
+            std::weak_ptr<Connector> weakSelf(shared_from_this());
+            loop_->runAfter(delay / 1000.0, [weakSelf]() { 
+                if(auto self = weakSelf.lock()) {
+                    self->startInLoop(); 
+                }
+            });
             //retry时间指数退避
             retryDelayMs_.store(delay, std::memory_order_release);
         }else{

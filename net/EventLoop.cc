@@ -39,10 +39,10 @@ namespace net
          wakeupChannel_(std::make_unique<Channel>(this, wakeupfd_)),
          currentActiveChannel_(nullptr)
     {
-        // LOG_DEBUG << "EventLoop created" << "in" << "[thread]"<< CurrentThread::tidString();
+        LOG_DEBUG << "EventLoop created" << "in" << "[thread]"<< CurrentThread::tidString();
         //for test
-        std::cout << "EventLoop::EventLoop() - constructing EventLoop " << this
-                  << " in thread " << threadId_ << std::endl;
+        // std::cout << "EventLoop::EventLoop() - constructing EventLoop " << this
+        //           << " in thread " << threadId_ << std::endl;
         if(t_LoopInThisThread != nullptr)
         {
             LOG_ERROR << "thisThread is already owned";
@@ -148,17 +148,19 @@ namespace net
         timerQueue_->cancel(sequence);
     }
 
+    //“Run this callback in the loop thread, no matter who calls me.”
     void EventLoop::runInLoop(Functor cb)
     {
         // LOG_DEBUG << "EventLoop::runInLoop - cb address: " << (void*)&cb;
         //是在当前线程中调用就直接执行
+        //同步调用
         if(isInLoopThread())
         {
             // LOG_DEBUG << "EventLoop::runInLoop - in loop thread, execute directly";
             cb();
             // LOG_DEBUG<< "EventLoop::runInLoop -  after cb() execute ";
         }
-        else
+        else//加到pending functor中
         {
             // LOG_DEBUG<< "EventLoop::runInLoop - not in loop thread, queue in loop";
             queueInLoop(std::move(cb));

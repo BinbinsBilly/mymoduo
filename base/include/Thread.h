@@ -8,10 +8,10 @@
 
 #pragma once
 
-#include <CountDownLatch.hpp>
-#include <CurrentThread.h>
-#include <noncopyable.h>
-#include <Logging.h>
+#include "CountDownLatch.hpp"
+#include "CurrentThread.h"
+#include "noncopyable.h"
+#include "Logging.h"
 
 #include <atomic>
 #include <functional>
