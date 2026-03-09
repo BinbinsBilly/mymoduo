@@ -219,7 +219,7 @@ void Connector::handleWrite()
         }
 
         //非阻塞connect完成后，内核会发送一个写事件通知我们连接建立成功，或者连接失败
-        //可写时间只代表连接完成, 成功或失败是未知的    
+        //可写事件只代表连接完成, 成功或失败是未知的    
         //必须通过getsockopt获取SO_ERROR来判断连接是否成功
         savedError = Socket::getSocketError(sockfd);
         if(savedError)

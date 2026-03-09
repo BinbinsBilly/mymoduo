@@ -42,17 +42,19 @@ namespace net
 
     void Channel::handleEvent(mymoduo::base::TimeStamp recvTime)
     {
-        // Simplified tie logic: single lock attempt; if object expired we may skip callbacks.
-        // Current behavior keeps invoking callbacks even if tied object is gone to preserve legacy semantics.
+        std::shared_ptr<void> guard;
         if(tied_)
         {
-            if(auto guard = tie_.lock(); !guard)
+            guard = tie_.lock();
+            if(guard)
             {
-                // Optional future change: return early to suppress callbacks when owner destroyed.
-                // return; // <- enable if desired.
+                handleEventWithGuard(recvTime);
             }
         }
-        handleEventWithGuard(recvTime);
+        else
+        {
+            handleEventWithGuard(recvTime);
+        }
     }
 
     void Channel::handleEventWithGuard(mymoduo::base::TimeStamp receiveTime)

@@ -75,7 +75,7 @@ static void testRemoveChannel() {
     ::close(efd);
 }
 
-// 测试 tie 语义：被 tie 的对象销毁后仍不崩溃（当前实现继续执行回调）
+// 测试 tie 语义：被 tie 的对象销毁后应跳过回调，避免访问已析构对象。
 static void testTieBehavior() {
     std::cout << "[testTieBehavior]" << std::endl;
     mymoduo::net::EventLoop loop;
@@ -93,7 +93,7 @@ static void testTieBehavior() {
     ::write(efd, &one, sizeof(one));
     ch.setrevents(static_cast<int>(Event::Read));
     ch.handleEvent(mymoduo::base::TimeStamp::now());
-    assert(readCount.load() == 1);
+    assert(readCount.load() == 0);
     ch.disableAll();
     ch.remove();
     ::close(efd);

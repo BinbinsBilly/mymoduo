@@ -186,6 +186,7 @@ namespace mymoduo :: net
                 outputBuffer_.retrieve(n);
                 if(outputBuffer_.readableBytes() == 0) //buff缓冲区中无数据, 发送完毕
                 {
+                    //LT mode 默认关闭写
                     connChannel_->disableWrite();
                     if(writeCompleteCb_)
                     {
@@ -318,7 +319,7 @@ namespace mymoduo :: net
                     }
                 });
             }
-            // 剩余数据添加到outputBuffer_中 等待下一次可写事件(可写缓冲区0->1)触发再写入内核缓冲区
+            // 剩余数据添加到outputBuffer_中 等待下一次可写事件
             outputBuffer_.append(static_cast<const char*>(data) + nwrote, remaining);
             if(!connChannel_->isWriting())
             {

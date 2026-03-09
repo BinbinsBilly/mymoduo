@@ -9,14 +9,6 @@
 
 using namespace mymoduo::net;
 
-// helper to run an EventLoop in-place
-template<typename F>
-static void runLoop(F&& setup) {
-    mymoduo::net::EventLoop loop;
-    setup(loop);
-    loop.loop();
-}
-
 static uint16_t pickEphemeralPort()
 {
     using mymoduo::net::Socket;
@@ -37,7 +29,10 @@ static void testUpdateTriggersRemoveCallback() {
     {
         mymoduo::net::EventLoop loop;
         HeartBeat hb(&loop, 4, 1.0);
-        hb.setRemoveConnectionCb([&](const TcpConnPtr&){ removed.fetch_add(1); });
+        hb.setRemoveConnectionCb([&](const TcpConnPtr&){
+            removed.fetch_add(1);
+            loop.quit();
+        });
 
         uint16_t port = pickEphemeralPort();
         InetAddress serverAddr(port, true);
@@ -57,7 +52,7 @@ static void testUpdateTriggersRemoveCallback() {
         TcpClient client(&loop, cliAddr, std::string("hb_client"));
         client.start();
 
-        loop.runAfter(5, [&]{ loop.quit(); });
+        loop.runAfter(2.5, [&]{ loop.quit(); });
         loop.loop();
     }
 
