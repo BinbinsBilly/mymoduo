@@ -11,7 +11,7 @@ int TimerQueueHeapUniquePtrPmr::createTimerfd() {
     return ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 }
 void TimerQueueHeapUniquePtrPmr::readTimerfd(int fd) {
-    uint64_t exp; ::read(fd, &exp, sizeof(exp));
+    uint64_t exp; ssize_t n = ::read(fd, &exp, sizeof(exp)); (void)n;
 }
 void TimerQueueHeapUniquePtrPmr::setTimerfd(int fd, base::TimeStamp when) {
     itimerspec its{};

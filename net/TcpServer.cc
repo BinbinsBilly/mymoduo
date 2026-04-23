@@ -23,10 +23,12 @@ namespace net
         ,threadPool_(std::make_shared<EventLoopThreadPool>(loop, name_))
         ,started_(0)
         ,nextConnId_(1)
-        ,heartBeat_(std::make_unique<HeartBeat>(loop, slots, timeout))
+        ,heartBeat_((slots > 0 && timeout > 0) ? std::make_unique<HeartBeat>(loop, slots, timeout) : nullptr)
     {
         acceptor_->setNewConnCb([this](Socket&& s, const InetAddress& peer){ this->newConnection(std::move(s), peer); });
-        heartBeat_->setRemoveConnectionCb([this](const TcpConnPtr& conn){ this->removeConnection(conn); });
+        if (heartBeat_) {
+            heartBeat_->setRemoveConnectionCb([this](const TcpConnPtr& conn){ this->removeConnection(conn); });
+        }
     }
 
     TcpServer::~TcpServer()
@@ -105,12 +107,14 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
     newconn->setConnectionCb(connectionCb_);
     newconn->setMessageCb(messageCb_);
     newconn->setWriteCompleteCb(writeCompleteCb_);
-    newconn->setHeartBeatUpdateCb([this](const TcpConnPtr& conn){
-        this->heartBeat_->update(conn);
-    });
-    newconn->setHeartBeatRemoveCb([this](const TcpConnPtr& conn){
-        this->heartBeat_->remove(conn);
-    });
+    if (heartBeat_) {
+        newconn->setHeartBeatUpdateCb([this](const TcpConnPtr& conn){
+            this->heartBeat_->update(conn);
+        });
+        newconn->setHeartBeatRemoveCb([this](const TcpConnPtr& conn){
+            this->heartBeat_->remove(conn);
+        });
+    }
     
     // 连接关闭的回调, 由TcpServer来执行清理工作
     newconn->setHandleCloseCb([this](const TcpConnPtr& conn){

@@ -13,6 +13,7 @@
 #include <functional>
 #include "Callbacks.h"
 #include "Buffer.h"
+#include "TimeStamp.h"
 
 namespace mymoduo
 {
@@ -106,6 +107,8 @@ private:
     HeartBeatRemoveCb heartBeatRemoveCb_;
     
     size_t highWaterMark_;
+
+    base::TimeStamp lastHeartBeatUpdateTime_;
 
     Buffer inputBuffer_;
     Buffer outputBuffer_;

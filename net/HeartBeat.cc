@@ -44,16 +44,22 @@ void HeartBeat::update(const TcpConnPtr& newConn)
     }
     const TcpConnPtr& conn = newConn;
     auto it = conn2slots_.find(conn);
+    int step = static_cast<int>(timeout_);
+    int newslot = (currentSlot_ + step) % slots_;
+    
     if(it != conn2slots_.end())
     {
+        // 如果连接已经在目标槽位中（比如同一秒内有成千上万个包），无需重复擦除和插入
+        if(it->second == newslot)
+        {
+            return;
+        }
         // 已加入，先擦除
         wheel_[it->second].erase(conn);
     }
     //for test
     // std::cout << "HeartBeat::update - before insert use_count=" << (conn ? conn.use_count() : 0) << std::endl;
     // 计算新的超时时间（按秒为单位的槽位数）
-    int step = static_cast<int>(timeout_);
-    int newslot = (currentSlot_ + step) % slots_;
     wheel_[newslot].insert(conn);
     //for test
     // std::cout << "HeartBeat::update - after insert conn use_count=" << (conn ? conn.use_count() : 0) << std::endl;
