@@ -30,8 +30,6 @@ install(TARGETS mymoduo_net mymoduo_base
 )
 
 # 4. 安装头文件（去掉双层 include）
-# 原：install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include DESTINATION include)
-# 改：把 include 目录下的“内容”拷到 <prefix>/include，而不是再套一层 include
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/net/include/
         DESTINATION include
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")

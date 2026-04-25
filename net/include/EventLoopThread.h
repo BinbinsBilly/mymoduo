@@ -15,6 +15,7 @@
 
 #include <thread>
 #include <future>
+#include <memory>
 
 namespace mymoduo
 {
@@ -35,7 +36,7 @@ public:
 private:
     void threadFunc();
 
-    EventLoop* loop_;  //栈上变量 不需守护
+    std::unique_ptr<EventLoop> loop_;  // 堆上分配，确保生命周期安全
     //这里使用std::promise和std::future实现同步 等待确保获取到EventLoop对象
     //这里也能使用std::latch实现功能, 那就和大神的moduo语义一致了
     //但是因为这里只要求一次通知 所以用promise更明确一点

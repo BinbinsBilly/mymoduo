@@ -19,6 +19,7 @@ struct Args {
     size_t msgSize = 64;
     int concurrency = 1;
     size_t seconds = 5;
+    int threads = 4;
 };
 
 static Args parse(int argc, char** argv) {
@@ -30,6 +31,7 @@ static Args parse(int argc, char** argv) {
         else if (s == "--msg") a.msgSize = std::stoul(next());
         else if (s == "--conc") a.concurrency = std::stoi(next());
         else if (s == "--sec") a.seconds = std::stoul(next());
+        else if (s == "--threads") a.threads = std::stoi(next());
     }
     return a;
 }
@@ -41,7 +43,7 @@ int main(int argc, char** argv)
     //解析命令行参数
     Args args = parse(argc, argv);
     LOG_DEBUG << "pingpong_bench start port=" << args.port << " msg=" << args.msgSize
-             << " conc=" << args.concurrency << " sec=" << args.seconds;
+             << " conc=" << args.concurrency << " sec=" << args.seconds << " threads=" << args.threads;
 
     // 创建独立的事件循环线程，避免主线程被 loop() 阻塞导致后续客户端线程无法启动
     EventLoopThread loopThread(nullptr, "pingpong-server-loop");
@@ -51,7 +53,9 @@ int main(int argc, char** argv)
     //EventLoop是在子线程中创建的
     mymoduo::net::EventLoop* loop = loopThread.startLoop();
     InetAddress addr(args.port, true, false);
-    TcpServer server(loop, addr, "pingpong-bench");
+    TcpServer server(loop, addr, "pingpong-bench", 0, 0);
+
+    server.setThreadNum(args.threads);
 
     LOG_DEBUG << "setting message callback";
     server.setMessageCb([&](const TcpConnPtr& c, Buffer* buf, mymoduo::base::TimeStamp){

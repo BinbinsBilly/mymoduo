@@ -11,20 +11,21 @@ namespace net
     {}
     EventLoopThread::~EventLoopThread()
     {
-        //线程析构时 自动调用Thread析构函数
-        loop_ -> quit();   // 退出事件循环
+        if (loop_) {
+            loop_->quit();   // 退出事件循环
+        }
         thread_.join();    // 等待线程结束 !!! 这个很重要, 会阻塞等待loop线程退出
-        loop_ = nullptr;
+        // loop_ 会被 unique_ptr 自动销毁
     }
 
     // EventLoop线程函数
     void EventLoopThread::threadFunc()
     {
-        EventLoop loop; //栈上loop
-        loopPromise_.set_value(&loop);
+        loop_ = std::make_unique<EventLoop>(); // 堆上分配，确保生命周期安全
+        loopPromise_.set_value(loop_.get());
         if(cb_)  //如果设置了回调 在循环前调用
         {
-            cb_(&loop);
+            cb_(loop_.get());
         }
 
         LOG_DEBUG << "EventLoopThread" << "[Name]: "<< thread_.name() << "- EventLoop thread started in thread "
@@ -34,9 +35,10 @@ namespace net
         // std::cout<< "EventLoopThread::threadFunc() - EventLoop thread started in thread "
         //          << tid << std::endl;
 
-        loop.loop(); // 事件循环 一去不返
+        loop_->loop(); // 事件循环 一去不返
         LOG_DEBUG << "EventLoopThread" << "[Name]: "<< thread_.name() << "- EventLoop thread exit in thread "
                   << CurrentThread::tidString();
+        // loop_ 在析构时自动销毁
         //for test
     }
 
@@ -45,8 +47,8 @@ namespace net
     {
         assert(!thread_.started());
         thread_.start();
-        loop_ = loopPromise_.get_future().get(); //阻塞等待loop创建完
-        return loop_;
+        EventLoop* loop = loopPromise_.get_future().get(); //阻塞等待loop创建完
+        return loop;
     }
 } // namespace net
 } // namespace mymoduo
