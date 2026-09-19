@@ -19,10 +19,9 @@ namespace mymoduo :: net
         ,inputBuffer_(64 * 1024)  //64KB
         ,outputBuffer_(64 * 1024) //64KB
     {
-        connSocket_->setReuseAddr(ReuseAddr::ENABLE);
-        connSocket_->setReusePort(ReusePort::ENABLE);
+        //已连接 socket(accept 返回或 connect 成功): setReuseAddr/setReusePort/bindaddress 均无效,
+        //bind 对已连接 socket 必然 EINVAL, 故只保留 setKeepAlive(与 muduo 行为一致)
         connSocket_->setKeepAlive(KeepAlive::ENABLE);
-        connSocket_->bindaddress(localAddr);
 
         connChannel_->setReadEventCb([this](mymoduo::base::TimeStamp timestamp){ this->handleRead(timestamp); });
         connChannel_->setWriteEventCb([this](){ this->handleWrite(); });
@@ -39,6 +38,23 @@ namespace mymoduo :: net
                  << "] from " << peerAddr_.toIpPort()
                  << " to " << localAddr_.toIpPort()
                  << " is down";
+        // 兜底: connectDestroyed 未执行时(channel 仍存在)在 loop 线程内清理, 避免事件残留
+        if(connChannel_)
+        {
+            if(loop_->isInLoopThread())
+            {
+                if(!connChannel_->isNoneEvent())
+                {
+                    connChannel_->disableAll();
+                }
+                connChannel_->remove();
+            }
+            else
+            {
+                LOG_WARN << "TcpConn::~TcpConn - channel cleanup skipped (not in loop thread), fd = "
+                         << connChannel_->fd();
+            }
+        }
     }
 
 

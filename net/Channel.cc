@@ -71,8 +71,9 @@ namespace net
         {
             if(eCb_) { eCb_(); }
         }
-        // hangup (POLLHUP) or peer closed (POLLRDHUP)
-        if(revent_ & (POLLHUP | POLLRDHUP))
+        // peer closed (POLLHUP)
+        // 仅当 HUP 且不可读时才走 close 路径，可读时由 read()==0 触发 handleClose，避免双重关闭
+        if((revent_ & POLLHUP) && !(revent_ & (POLLIN | POLLPRI)))
         {
             if(cCb_) { cCb_(); }
         }

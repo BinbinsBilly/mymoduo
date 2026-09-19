@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <functional>
+#include <memory>
 
 using namespace mymoduo::net;
 
@@ -55,6 +56,25 @@ static void testCancelTimer() {
     std::cout << "[testCancelTimer] passed fired=" << fired.load() << std::endl;
 }
 
+// 测试重复定时器自取消：回调内首次触发时 cancel 自身 sequence，
+// 若延迟取消生效则定时器不再重启，之后不会再触发。
+static void testRunEverySelfCancel() {
+    std::cout << "[testRunEverySelfCancel] start" << std::endl;
+    std::atomic<int> count{0};
+    // runEvery 返回 sequence 后才能在回调内引用：用 shared_ptr 间接保存，回调内读取
+    auto seq = std::make_shared<int64_t>(0);
+    runLoopWithSetup([&](mymoduo::net::EventLoop& loop){
+        *seq = loop.runEvery(0.05, [&, seq]{
+            count.fetch_add(1);
+            loop.cancel(*seq); // 正在执行的定时器自取消：应阻止 handleRead 之后的重启
+        });
+        loop.runAfter(0.50, [&]{ loop.quit(); });
+    });
+    // 自取消若失效，50ms 周期在 500ms 内会触发多次；正确行为是恰好触发 1 次
+    assert(count.load() == 1);
+    std::cout << "[testRunEverySelfCancel] passed count=" << count.load() << std::endl;
+}
+
 // 测试跨线程调度：在 loop 运行后由其它线程调用 runAfter/queueInLoop 添加任务
 static void testCrossThreadSchedule() {
     std::cout << "[testCrossThreadSchedule] start" << std::endl;
@@ -83,6 +103,7 @@ int main() {
     testRunAfterSingle();
     testRunEveryRepeat();
     testCancelTimer();
+    testRunEverySelfCancel();
     testCrossThreadSchedule();
     std::cout << "TimerQueueIntegrationTest ALL passed" << std::endl;
     return 0;

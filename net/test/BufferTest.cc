@@ -1,6 +1,7 @@
 #include "Buffer.h"
 
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -71,6 +72,37 @@ static void testStringViewAll() {
     assert(sv == "abc");
 }
 
+static void testPeekT() {
+    Buffer buf(16);
+    uint32_t value = 0x12345678u;
+    buf.append(&value, sizeof(value));
+    // peekT 只窥视，不移动读指针
+    assert(buf.peekT<uint32_t>() == value);
+    assert(buf.readableBytes() == sizeof(value));
+}
+
+static void testReadTUint32() {
+    Buffer buf(16);
+    uint32_t value = 0xdeadbeefu;
+    buf.append(&value, sizeof(value));
+    // readT 返回正确值，且读指针前移 4 字节
+    assert(buf.readT<uint32_t>() == value);
+    assert(buf.readableBytes() == 0);
+}
+
+static void testReadTInt16() {
+    Buffer buf(16);
+    int16_t a = -1234;
+    int16_t b = 4321;
+    buf.append(&a, sizeof(a));
+    buf.append(&b, sizeof(b));
+    assert(buf.readableBytes() == 4);
+    assert(buf.readT<int16_t>() == a);
+    assert(buf.readableBytes() == 2);
+    assert(buf.readT<int16_t>() == b);
+    assert(buf.readableBytes() == 0);
+}
+
 void test()
 {
     testAppendAndRetrieve();
@@ -78,6 +110,9 @@ void test()
     testPrepend();
     testFindCRLFAndEOL();
     testStringViewAll();
+    testPeekT();
+    testReadTUint32();
+    testReadTInt16();
     std::cout << "All Buffer tests passed.\n";
 }
 
@@ -87,6 +122,9 @@ int main() {
     testPrepend();
     testFindCRLFAndEOL();
     testStringViewAll();
+    testPeekT();
+    testReadTUint32();
+    testReadTInt16();
     std::cout << "All Buffer tests passed.\n";
     return 0;
 }

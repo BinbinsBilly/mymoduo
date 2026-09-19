@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            buildtype: Release
+            cxxflags: ""
+          - name: ASan+UBSan
+            buildtype: Debug
+            cxxflags: "-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }}
+          -DCMAKE_CXX_FLAGS="${{ matrix.cxxflags }}"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Run tests
+        working-directory: build
+        run: ctest --output-on-failure --timeout 120
+
+      - name: Smoke test pingpong_bench
+        run: timeout 60 ./build/example/pingpong_bench --port 22222 --msg 64 --conc 8 --sec 3 --threads 4

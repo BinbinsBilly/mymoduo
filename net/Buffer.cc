@@ -118,31 +118,6 @@ void Buffer::retrieveAll() noexcept
     writerIndex_ = kCheapPrepend;
 }
 
-template<typename T>
-auto Buffer::retrieveT() noexcept -> std::enable_if_t<is_supported_int_type<T>, void>
-{
-    assert(readableBytes() >= sizeof(T));
-    retrieve(sizeof(T));
-}
-
-template<typename T>
-auto Buffer::readT() noexcept -> std::enable_if_t<is_supported_int_type<T>, void>
-{
-    T result = peekT<T>();
-    retrieveT<T>();
-    return result;
-}
-
-//后期需要修正字节序问题
-template<typename T>
-auto Buffer::peekT() const noexcept -> std::enable_if_t<is_supported_int_type<T>, void>
-{
-    assert(readableBytes() >= sizeof(T));
-    T value{0};
-    ::memcpy(&value, peek(), sizeof(T));
-    return value;
-}
-
 const char* Buffer::findCRLF() const noexcept
 {
     const char* crlf = std::search(peek(), writeBegin(),

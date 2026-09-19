@@ -50,24 +50,24 @@ private:
     void updateTimerfd();
 
     //在loop中实际调用的处理逻辑
-    void addTimerInLoop(std::unique_ptr<Timer> newtimer);
+    void addTimerInLoop(std::shared_ptr<Timer> newtimer);
     void cancelInLoop(int64_t sequence);
     
     // timer内部的timerfd 读事件
     void handleRead();
     //获取所有过期的timer
-    std::vector<std::unique_ptr<Timer>> getExpiration(base::TimeStamp now); 
+    std::vector<std::shared_ptr<Timer>> getExpiration(base::TimeStamp now); 
     //根据是否是可重复timer 重置可期timer的装填
-    void updateTimerList(std::vector<std::unique_ptr<Timer>> &&expiration, base::TimeStamp now);
+    void updateTimerList(std::vector<std::shared_ptr<Timer>> &&expiration, base::TimeStamp now);
     // 插入到timerlist_ 需要更新timerfd
-    bool insert2TimerList(std::unique_ptr<Timer> newTimer);
+    bool insert2TimerList(std::shared_ptr<Timer> newTimer);
 
     struct TimerComp
     {
         //启用异构查找
         using is_transparent = void;
-        //unique_ptr 之间查找
-        bool operator()(const std::unique_ptr<Timer> &lhs,const std::unique_ptr<Timer> &rhs) const
+        //shared_ptr 之间查找
+        bool operator()(const std::shared_ptr<Timer> &lhs,const std::shared_ptr<Timer> &rhs) const
         {
             //需要严格比较出大小
             if(!(lhs->expiration() == rhs->expiration()))
@@ -77,7 +77,7 @@ private:
             return lhs.get() < rhs.get();
         }
         //用Timer查找
-        bool operator()(const std::unique_ptr<Timer> &lhs, const Timer *rhs) const 
+        bool operator()(const std::shared_ptr<Timer> &lhs, const Timer *rhs) const 
         {   
             if(!(lhs->expiration() == rhs->expiration()))
             {
@@ -85,7 +85,7 @@ private:
             }
             return lhs.get() < rhs; 
         }
-        bool operator()(const std::unique_ptr<Timer> &lhs, const Timer &rhs) const
+        bool operator()(const std::shared_ptr<Timer> &lhs, const Timer &rhs) const
         {   
             if(!(lhs->expiration() == rhs.expiration()))
             {
@@ -94,7 +94,7 @@ private:
             return lhs.get() < &rhs; 
         }
 
-        bool operator()(const Timer& lhs, const std::unique_ptr<Timer> &rhs) const
+        bool operator()(const Timer& lhs, const std::shared_ptr<Timer> &rhs) const
         {
             if(!(lhs.expiration() == rhs->expiration()))
             {
@@ -103,7 +103,7 @@ private:
             return &lhs < rhs.get(); 
         }
 
-        bool operator()(const Timer* lhs, const std::unique_ptr<Timer> &rhs) const
+        bool operator()(const Timer* lhs, const std::shared_ptr<Timer> &rhs) const
         {
             if(!(lhs->expiration() == rhs->expiration()))
             {
@@ -112,21 +112,21 @@ private:
             return lhs < rhs.get(); 
         }
         // 使用TimeStamp进行查找
-        bool operator()(const std::unique_ptr<Timer> &lhs, const base::TimeStamp &rhs) const 
+        bool operator()(const std::shared_ptr<Timer> &lhs, const base::TimeStamp &rhs) const 
         {   
             return lhs->expiration() < rhs;
         }
 
-        bool operator()(const base::TimeStamp &lhs, const std::unique_ptr<Timer> &rhs) const
+        bool operator()(const base::TimeStamp &lhs, const std::shared_ptr<Timer> &rhs) const
         {
             return lhs < rhs->expiration();
         } 
     };
 
     // 主存储定时器 (按过期时间排序)
-    using TimerList = std::set<std::unique_ptr<Timer>, TimerComp>;
-    // sequence 到 Timer* 的索引，O(1) 通过 sequence 找定时器
-    using SequenceIndex = std::unordered_map<int64_t, Timer*>;
+    using TimerList = std::set<std::shared_ptr<Timer>, TimerComp>;
+    // sequence 到 Timer 的索引（shared_ptr 共享所有权），O(1) 通过 sequence 找定时器
+    using SequenceIndex = std::unordered_map<int64_t, std::shared_ptr<Timer>>;
     // 延迟取消集合：在回调执行期间存储被取消的定时器 sequence，避免悬垂指针
     using CancelList = std::set<int64_t>;
     bool callingExpired_;

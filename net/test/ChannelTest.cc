@@ -90,12 +90,61 @@ static void testTieBehavior() {
     } // obj 超出作用域被销毁
     // 手动模拟一次 eventfd 可读并触发 handleEvent
     uint64_t one = 1; 
-    ::write(efd, &one, sizeof(one));
+    assert(::write(efd, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one)));
     ch.setrevents(static_cast<int>(Event::Read));
     ch.handleEvent(mymoduo::base::TimeStamp::now());
     assert(readCount.load() == 0);
     ch.disableAll();
     ch.remove();
+    ::close(efd);
+}
+
+// 对端关闭但 EOF 仍可读（epoll 返回 EPOLLIN|EPOLLHUP）：
+// 不应直接触发 closeCb，应由 readCb 中 read()==0 触发 handleClose，避免双重关闭。
+static void testHupWithRead() {
+    std::cout << "[testHupWithRead]" << std::endl;
+    mymoduo::net::EventLoop loop;
+    int efd = createEventFd();
+    Channel ch(&loop, efd);
+    std::atomic<int> readCount{0};
+    std::atomic<int> closeCount{0};
+    ch.setReadEventCb([&](mymoduo::base::TimeStamp){ readCount.fetch_add(1); });
+    ch.setCloseEventCb([&]{ closeCount.fetch_add(1); });
+    ch.setrevents(POLLHUP | POLLIN);
+    ch.handleEvent(mymoduo::base::TimeStamp::now());
+    assert(closeCount.load() == 0);
+    assert(readCount.load() == 1);
+    ::close(efd);
+}
+
+// 仅 POLLHUP（不可读）：应触发 closeCb，且不触发 readCb。
+static void testHupOnly() {
+    std::cout << "[testHupOnly]" << std::endl;
+    mymoduo::net::EventLoop loop;
+    int efd = createEventFd();
+    Channel ch(&loop, efd);
+    std::atomic<int> readCount{0};
+    std::atomic<int> closeCount{0};
+    ch.setReadEventCb([&](mymoduo::base::TimeStamp){ readCount.fetch_add(1); });
+    ch.setCloseEventCb([&]{ closeCount.fetch_add(1); });
+    ch.setrevents(POLLHUP);
+    ch.handleEvent(mymoduo::base::TimeStamp::now());
+    assert(closeCount.load() == 1);
+    assert(readCount.load() == 0);
+    ::close(efd);
+}
+
+// POLLERR 应触发 errorCb。
+static void testErrorTriggersErrorCb() {
+    std::cout << "[testErrorTriggersErrorCb]" << std::endl;
+    mymoduo::net::EventLoop loop;
+    int efd = createEventFd();
+    Channel ch(&loop, efd);
+    std::atomic<int> errorCount{0};
+    ch.setErrorEventCb([&]{ errorCount.fetch_add(1); });
+    ch.setrevents(POLLERR);
+    ch.handleEvent(mymoduo::base::TimeStamp::now());
+    assert(errorCount.load() == 1);
     ::close(efd);
 }
 
@@ -106,6 +155,9 @@ int main() {
     testDisableAll();
     testRemoveChannel();
     testTieBehavior();
+    testHupWithRead();
+    testHupOnly();
+    testErrorTriggersErrorCb();
     std::cout << "ChannelTest ALL passed" << std::endl;
     return 0;
 }

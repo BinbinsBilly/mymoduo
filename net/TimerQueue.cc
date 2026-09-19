@@ -69,9 +69,9 @@ namespace detail
         ::close(timerfd_);
     }
 
-    std::vector<std::unique_ptr<Timer>> TimerQueue::getExpiration(base::TimeStamp now)
+    std::vector<std::shared_ptr<Timer>> TimerQueue::getExpiration(base::TimeStamp now)
     {
-        std::vector<std::unique_ptr<Timer>> expired;
+        std::vector<std::shared_ptr<Timer>> expired;
         auto end = timerlist_.lower_bound(now);
         for(auto it = timerlist_.begin(); it != end; )
         {
@@ -83,7 +83,7 @@ namespace detail
         return expired;
     }
 
-    void TimerQueue::addTimerInLoop(std::unique_ptr<Timer> newTimer)
+    void TimerQueue::addTimerInLoop(std::shared_ptr<Timer> newTimer)
     {
         insert2TimerList(std::move(newTimer));
     }
@@ -91,8 +91,15 @@ namespace detail
     void TimerQueue::cancelInLoop(int64_t sequence)
     {
         auto mapIt = sequenceIndex_.find(sequence);
-        if(mapIt == sequenceIndex_.end()) return; // 无此定时器
-        Timer* raw = mapIt->second;
+        if(mapIt == sequenceIndex_.end())
+        {
+            if(callingExpired_)
+            {
+                cancelList_.insert(sequence); // 正在执行的定时器: 延迟取消, 阻止其重启
+            }
+            return; // 无此定时器
+        }
+        Timer* raw = mapIt->second.get();
         auto setIt = timerlist_.find(raw); // 异构查找
         if(setIt == timerlist_.end()) { sequenceIndex_.erase(mapIt); return; }
         if(callingExpired_)
@@ -136,7 +143,7 @@ namespace detail
         auto expired = getExpiration(now);
 
         callingExpired_ = true;
-        //it == std::unique_ptr<Timer>
+        //it == std::shared_ptr<Timer>
         for(auto &t : expired)
         {
             if(cancelList_.find(t->getSequence()) == cancelList_.end())
@@ -148,7 +155,7 @@ namespace detail
         updateTimerList(std::move(expired), now);
     }
 
-    void TimerQueue::updateTimerList(std::vector<std::unique_ptr<Timer>> &&expired, base::TimeStamp now)
+    void TimerQueue::updateTimerList(std::vector<std::shared_ptr<Timer>> &&expired, base::TimeStamp now)
     {
         for(auto &t : expired)
         {
@@ -161,21 +168,21 @@ namespace detail
             if(t->repeat() && !wasCanceled)
             {
                 t->restart(now);
-                Timer* raw = t.get();
-                auto [pos, inserted] = timerlist_.emplace(std::move(t));
-                if(inserted) sequenceIndex_[raw->getSequence()] = raw;
+                auto sp = t; // 拷贝一份入 set
+                auto [pos, inserted] = timerlist_.insert(sp);
+                if(inserted) sequenceIndex_[sp->getSequence()] = sp;
             }
         }
         updateTimerfd();
     }
 
-    bool TimerQueue::insert2TimerList(std::unique_ptr<Timer> newTimer)
+    bool TimerQueue::insert2TimerList(std::shared_ptr<Timer> newTimer)
     {
         Timer* raw = newTimer.get();
-        auto [iter, inserted] = timerlist_.emplace(std::move(newTimer));
+        auto [iter, inserted] = timerlist_.insert(newTimer); // 拷贝入 set
         if(inserted)
         {
-            sequenceIndex_[raw->getSequence()] = raw;
+            sequenceIndex_[raw->getSequence()] = newTimer;
             if(timerlist_.size() == 1 || (*iter)->expiration() < (*timerlist_.begin())->expiration())
             {
                 detail::updateTimerfd(timerfd_, (*iter)->expiration());
@@ -185,11 +192,11 @@ namespace detail
     }
 
     int64_t TimerQueue::addTimer(TimerCb cb, base::TimeStamp when, double interval) {
-        // 不能将 unique_ptr 捕获到 std::function (不可复制)，改用原始指针并在 loop 线程内重新包装
-        Timer* raw = new Timer(std::move(cb), when, interval);
-        int64_t seq = raw->getSequence();
+        // shared_ptr 可拷贝, 能安全捕获进 std::function; functor 被丢弃时 timer 随引用计数归零自动释放
+        auto timer = std::make_shared<Timer>(std::move(cb), when, interval);
+        int64_t seq = timer->getSequence();
         //在loop线程中添加定时器
-        loop_->runInLoop([this, raw](){ addTimerInLoop(std::unique_ptr<Timer>(raw)); });
+        loop_->runInLoop([this, timer](){ addTimerInLoop(timer); });
         return seq;
     };
 

@@ -14,8 +14,11 @@ namespace net
         if (loop_) {
             loop_->quit();   // 退出事件循环
         }
+        //释放信号: 允许 loop 线程销毁 EventLoop;
+        //此时先于本对象析构的 loop 使用方(如先析构的 TcpServer)已全部完成
+        destructReleaseSem_.release();
         thread_.join();    // 等待线程结束 !!! 这个很重要, 会阻塞等待loop线程退出
-        // loop_ 会被 unique_ptr 自动销毁
+        // join 返回时 loop_ 已在 loop 线程内 reset, 此处不可再触碰
     }
 
     // EventLoop线程函数
@@ -38,7 +41,15 @@ namespace net
         loop_->loop(); // 事件循环 一去不返
         LOG_DEBUG << "EventLoopThread" << "[Name]: "<< thread_.name() << "- EventLoop thread exit in thread "
                   << CurrentThread::tidString();
-        // loop_ 在析构时自动销毁
+        // loop 退出后不能立刻销毁 EventLoop: quit 之后主线程可能仍在使用 loop
+        // (典型场景: 栈上 TcpServer 先于 loopThread 析构, ~TcpServer 还会向 loop 投递析构任务),
+        // 在此等待 ~EventLoopThread 的释放信号, 保证主线程使用完之前对象一直存活, 消除 use-after-free;
+        // 期间主线程投递的任务会留在 pendingFunctors_ 中, 随 ~EventLoop 在 loop 线程安全析构
+        destructReleaseSem_.acquire();
+        // 在 loop 线程内销毁 EventLoop:
+        // ~EventLoop 会摘除 wakeupChannel_(断言 isInLoopThread)并清理本线程 TLS,
+        // 若推迟到 ~EventLoopThread(通常在主线程)析构, 会触发断言并误清析构线程的 t_LoopInThisThread
+        loop_.reset();
         //for test
     }
 

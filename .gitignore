@@ -1,5 +1,6 @@
 .cache/
 build/
+build-asan/
 CMakeFiles/
 CMakeCache.txt
 CTestTestfile.cmake

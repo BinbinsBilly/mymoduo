@@ -16,6 +16,7 @@
 #include <thread>
 #include <future>
 #include <memory>
+#include <semaphore>
 
 namespace mymoduo
 {
@@ -41,6 +42,10 @@ private:
     //这里也能使用std::latch实现功能, 那就和大神的moduo语义一致了
     //但是因为这里只要求一次通知 所以用promise更明确一点
     std::promise<EventLoop*> loopPromise_;
+    //协调 EventLoop 的析构时机: loop 线程退出 loop() 后在此信号上等待,
+    //直到 ~EventLoopThread 释放(此时先于本对象析构的 loop 使用方已全部完成)才销毁 EventLoop,
+    //避免 quit 之后主线程(如先析构的 TcpServer)仍在访问 loop 时对象已被释放造成 use-after-free
+    std::counting_semaphore<1> destructReleaseSem_{0};
     ThreadInitCb cb_;
     base::Thread thread_;
 

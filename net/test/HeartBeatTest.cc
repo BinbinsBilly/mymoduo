@@ -28,8 +28,10 @@ static void testUpdateTriggersRemoveCallback() {
 
     {
         mymoduo::net::EventLoop loop;
-        HeartBeat hb(&loop, 4, 1.0);
-        hb.setRemoveConnectionCb([&](const TcpConnPtr&){
+        // enable_shared_from_this要求shared管理: start()中需用shared_from_this安全捕获
+        auto hb = std::make_shared<HeartBeat>(&loop, 4, 1.0);
+        hb->start();
+        hb->setRemoveConnectionCb([&](const TcpConnPtr&){
             removed.fetch_add(1);
             loop.quit();
         });
@@ -41,8 +43,8 @@ static void testUpdateTriggersRemoveCallback() {
         server.setConnectionCb([&hb](const TcpConnPtr& conn){
             if(conn)
             {
-                conn->setHeartBeatUpdateCb([&hb](const TcpConnPtr& c){ hb.update(c); });
-                conn->setHeartBeatRemoveCb([&hb](const TcpConnPtr& c){ hb.remove(c); });
+                conn->setHeartBeatUpdateCb([&hb](const TcpConnPtr& c){ hb->update(c); });
+                conn->setHeartBeatRemoveCb([&hb](const TcpConnPtr& c){ hb->remove(c); });
             }
         });
 
@@ -65,8 +67,9 @@ static void testUpdateTriggersRemoveCallback() {
 
 //     {
 //         mymoduo::net::EventLoop loop;
-//         HeartBeat hb(&loop, 4, 1.0);
-//         hb.setRemoveConnectionCb([&](const TcpConnPtr&){ removed.fetch_add(1); });
+//         auto hb = std::make_shared<HeartBeat>(&loop, 4, 1.0);
+//         hb->start();
+//         hb->setRemoveConnectionCb([&](const TcpConnPtr&){ removed.fetch_add(1); });
 
 //         uint16_t port = pickEphemeralPort();
 //         InetAddress serverAddr(port, true);
@@ -77,8 +80,8 @@ static void testUpdateTriggersRemoveCallback() {
 //             if(conn)
 //             {
 //                 storedConn = conn;
-//                 conn->setHeartBeatUpdateCb([&hb](const TcpConnPtr& c){ hb.update(c); });
-//                 conn->setHeartBeatRemoveCb([&hb](const TcpConnPtr& c){ hb.remove(c); });
+//                 conn->setHeartBeatUpdateCb([&hb](const TcpConnPtr& c){ hb->update(c); });
+//                 conn->setHeartBeatRemoveCb([&hb](const TcpConnPtr& c){ hb->remove(c); });
 //             }
 //         });
 
@@ -92,7 +95,7 @@ static void testUpdateTriggersRemoveCallback() {
 //         loop.runAfter(0.05, [&hb, &storedConn]{
 //             if(storedConn)
 //             {
-//                 hb.remove(storedConn);
+//                 hb->remove(storedConn);
 //             }
 //         });
 
@@ -103,9 +106,26 @@ static void testUpdateTriggersRemoveCallback() {
 //     assert(removed.load() == 0);
 // }
 
+//回归用例: HeartBeat销毁后tick定时器必须已被取消
+//loop继续运行覆盖原tick周期, 不再触发对已析构对象的访问(旧实现定时器捕获裸this, 会每秒UAF一次)
+static void testDestroyCancelsTickTimer() {
+    std::cout << "[testDestroyCancelsTickTimer]" << std::endl;
+
+    mymoduo::net::EventLoop loop;
+    {
+        auto hb = std::make_shared<HeartBeat>(&loop, 4, 1.0);
+        hb->start();
+        hb.reset(); //销毁HeartBeat: ~HeartBeat中cancel掉tick定时器
+    }
+    //等待2.5s, 覆盖原每秒一次的tick周期: 若定时器未取消, 每秒tick将访问已析构对象导致崩溃
+    loop.runAfter(2.5, [&]{ loop.quit(); });
+    loop.loop();
+}
+
 int main() {
     mymoduo::Logger::setLogLevel(mymoduo::Logger::LogLevel::ERROR);
     testUpdateTriggersRemoveCallback();
+    testDestroyCancelsTickTimer();
     // testRemoveSuppressesCallback();
     std::cout << "HeartBeat tests passed." << std::endl;
     return 0;

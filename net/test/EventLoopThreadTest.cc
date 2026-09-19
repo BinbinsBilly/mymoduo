@@ -56,10 +56,26 @@ static void test_queueInLoop_order() {
     std::cout << "[OK] test_queueInLoop_order" << std::endl;
 }
 
+// 析构时序: EventLoop 必须在 loop 线程内销毁, 且不得破坏主线程的 EventLoop 注册
+static void test_destruct_in_loop_thread() {
+    mymoduo::net::EventLoop mainLoop; // 主线程自身的 EventLoop
+    {
+        EventLoopThread loopThread(nullptr, "ELT4");
+        mymoduo::net::EventLoop* loop = loopThread.startLoop();
+        loop->runAfter(0.05, [loop]{ loop->quit(); });
+        // 作用域结束: ~EventLoopThread 中 quit + join, EventLoop 应已在 loop 线程内销毁
+    }
+    // 若 EventLoop 在主线程析构: removeChannel 的 assertInLoopThread 会失败,
+    // 且 t_LoopInThisThread 会被误清, 导致下面断言失败
+    assert(mymoduo::net::EventLoop::getEventLoopofCurrentThread() == &mainLoop);
+    std::cout << "[OK] test_destruct_in_loop_thread" << std::endl;
+}
+
 int main() {
     test_start_and_callback();
     test_runInLoop_executes();
     test_queueInLoop_order();
+    test_destruct_in_loop_thread();
     std::cout << "[ALL PASS] EventLoopThread tests" << std::endl;
     return 0;
 }

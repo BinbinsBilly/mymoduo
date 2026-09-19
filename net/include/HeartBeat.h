@@ -8,6 +8,7 @@
 #include "EventLoop.h"
 #include "TcpConn.h"
 
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +17,7 @@ namespace mymoduo
 {
 namespace net
 {
-class HeartBeat : noncopyable
+class HeartBeat : noncopyable, public std::enable_shared_from_this<HeartBeat>
 {
 public:
 
@@ -27,6 +28,9 @@ public:
     HeartBeat& operator=(const HeartBeat&) = delete;
     HeartBeat(HeartBeat&&) = delete;
     HeartBeat& operator=(HeartBeat&&) = delete;
+
+    //构造完成后启动每秒tick定时器: 构造函数中weak_from_this不可用, 必须由shared_ptr管理后再调用
+    void start();
 
     //有新连接时或读消息时更新槽位
     void update(const TcpConnPtr& newConn);
@@ -48,6 +52,8 @@ private:
     std::unordered_map<TcpConnPtr, int> conn2slots_;   //Conn 到 slot的映射
 
     int currentSlot_; //当前槽位
+
+    int64_t tickTimerSeq_ = 0; //tick定时器序号, ~HeartBeat中cancel
 
     std::function<void(const TcpConnPtr&)> removeConnectionCb_;
 

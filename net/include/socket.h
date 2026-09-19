@@ -123,7 +123,7 @@ public:
 
     bool isvalid() const
     {
-        return *sockfd_ >= 0;
+        return sockfd_ && *sockfd_ >= 0;
     }
 
 private:

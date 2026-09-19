@@ -83,18 +83,24 @@ namespace base
         std::promise<std::thread::id> threadIdPromise;
         std::future<std::thread::id> threadIdFuture = threadIdPromise.get_future();
 
-        thread_ = std::thread([this, &threadIdPromise]()
+        // 将 functor 与线程名移入线程自身所有权：
+        // 若 Thread 对象析构时未 join（detach），线程仍可能正在执行 func_()，
+        // 捕获 this 会导致对已析构成员的悬空访问。
+        // promise 通过 future.get() 同步，set_value 先于其析构，按引用捕获安全。
+        ThreadFunc func = std::move(func_);
+        std::string name = name_.empty() ? std::string("mymoduoThread") : name_;
+
+        thread_ = std::thread([&threadIdPromise, func = std::move(func), name = std::move(name)]() mutable
         {
             //获取线程ID // 获取值后设置promise状态为已满足 外部停止阻塞等待
             threadIdPromise.set_value(CurrentThread::threadId());
             //设置线程名
-            std::string name = name_.empty() ? "mymoduoThread" : name_.c_str();
             CurrentThread::setName(name);
             ::prctl(PR_SET_NAME, CurrentThread::name());
             try
             {
                 //执行用户回调
-                func_();
+                func();
                 CurrentThread::setName("finished");
             }
             catch(const std::exception& ex)

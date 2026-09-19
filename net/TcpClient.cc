@@ -1,5 +1,6 @@
 #include "TcpClient.h"
 #include "TcpConn.h"
+#include <chrono>
 #include <future>
 
 namespace mymoduo {
@@ -40,13 +41,19 @@ TcpClient::~TcpClient() {
     // complete before TcpClient is fully destroyed.
     // This prevents use-after-free in user callbacks that capture `this`.
     EventLoop *ioLoop = conn->getLoop();
-    std::promise<void> p;
-    auto f = p.get_future();
-    ioLoop->runInLoop([conn, &p]() {
+    // promise 用 shared_ptr: 超时返回后 functor 仍可能迟到执行, 不能引用栈上对象
+    // functor 捕获 conn(shared_ptr), 迟到执行也是安全的
+    auto p = std::make_shared<std::promise<void>>();
+    auto f = p->get_future();
+    ioLoop->runInLoop([conn, p]() {
       conn->connectDestroyed();
-      p.set_value();
+      p->set_value();
     });
-    f.wait();
+    // 有界等待: loop 已 quit 时 functor 永不执行, 无界等待会导致析构死锁
+    if (f.wait_for(std::chrono::seconds(2)) != std::future_status::ready) {
+      LOG_WARN << "TcpClient::~TcpClient - timeout waiting for connection "
+                  "destruction, loop may have stopped";
+    }
     LOG_DEBUG << "TcpConn destroyed in ~TcpClient";
   }
 }

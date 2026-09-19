@@ -113,13 +113,15 @@ private:
     std::atomic<bool> quit_{false};
     std::atomic<bool> eventHandeling_{false};
     std::atomic<bool> callingPendingFunc_{false};
-    std::vector<Functor> pendingFunctors_;
     int64_t iteration_; //while的次数
     base::TimeStamp returnTime_;
     std::unique_ptr<Poller> Poller_;
     std::unique_ptr<TimerQueue> timerQueue_;
     int wakeupfd_;
     std::unique_ptr<Channel> wakeupChannel_;
+    // pendingFunctors_ 必须先于 Poller_ 析构：被丢弃的 functor 可能持有 Channel/Acceptor，
+    // 其析构需要访问 Poller_
+    std::vector<Functor> pendingFunctors_;
     ChannelList activeChannel_;
     Channel* currentActiveChannel_;  //中间量不需要RAII守护 
     mutable std::shared_mutex mutex_;

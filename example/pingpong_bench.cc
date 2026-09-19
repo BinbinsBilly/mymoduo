@@ -129,7 +129,5 @@ int main(int argc, char** argv)
     
     std::cout<< "PingPong ops/s=" << opsPerSec << std::endl;
 
-    //FIXME: 因为不是在主线程中创建的TcpServer, 所以这里TcpSercer
-    //析构时会断言失败, 但不影响测试
     return 0;
 }

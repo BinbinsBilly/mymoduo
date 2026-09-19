@@ -119,12 +119,68 @@ static void testTcpInfoString() {
     }
 }
 
+static void testMovedFromFd() {
+    // moved-from Socket 的 sockfd_ 为 nullptr, fd() 应返回 -1 而不是解引用空指针
+    auto opt = Socket::create(AF_INET, SOCK_STREAM, 0);
+    assert(opt.has_value());
+    Socket a = std::move(*opt);
+    Socket b = std::move(a); // a 变为 moved-from
+    assert(b.fd() >= 0);     // fd 所有权已转移给 b
+    assert(a.fd() == -1);    // moved-from Socket 的 fd() 返回 -1
+    std::cout << "Moved-from Socket fd() returns -1." << '\n';
+}
+
+static void testSelfConnection() {
+    // 用一对真实的 TCP 连接(非自连接)验证 selfConnection 返回 false
+    // 注意: 未连接 fd 的 getpeername 会失败返回全 0 地址, 可能误判, 故必须用真实连接
+    auto serverOpt = Socket::create(AF_INET, SOCK_STREAM, 0);
+    assert(serverOpt.has_value());
+    auto &server = *serverOpt;
+    server.setReuseAddr(ReuseAddr::ENABLE);
+    bool bound = server.bindaddress(InetAddress(0, true));
+    assert(bound);
+    bool listened = server.listen(16);
+    assert(listened);
+
+    // 查询实际端口
+    struct sockaddr_in sin{};
+    socklen_t len = sizeof(sin);
+    int r = ::getsockname(server.fd(), reinterpret_cast<sockaddr*>(&sin), &len);
+    assert(r == 0);
+    uint16_t port = ntohs(sin.sin_port);
+
+    std::thread client([port]{
+        int cfd = ::socket(AF_INET, SOCK_STREAM, 0);
+        assert(cfd >= 0);
+        struct sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        ::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+        int cr = ::connect(cfd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+        assert(cr == 0);
+        // 保持连接直到 selfConnection 检查完成
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ::close(cfd);
+    });
+
+    InetAddress peer;
+    auto acceptedOpt = server.accept(peer);
+    assert(acceptedOpt.has_value());
+    assert(acceptedOpt->fd() >= 0);
+    // 普通连接(非自连接)应返回 false
+    assert(!Socket::selfConnection(acceptedOpt->fd()));
+    std::cout << "selfConnection returns false for a normal connection." << '\n';
+    client.join();
+}
+
 int main() {
     testCreate();
     testOptions();
     testBindListenAccept();
     testMoveSemantics();
     testTcpInfoString();
+    testMovedFromFd();
+    testSelfConnection();
     std::cout << "All Socket tests passed." << std::endl;
     return 0;
 }

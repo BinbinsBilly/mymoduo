@@ -57,6 +57,11 @@ private:
 
     std::unique_ptr<Acceptor> acceptor_;  //for listenning new connection
 
+    //心跳检测
+    //析构时所有权移交 baseLoop(见 ~TcpServer): ~HeartBeat 需 cancel tick 定时器, 须在 loop 线程内析构;
+    //TcpConn 侧回调持有 weak_ptr, HeartBeat 析构后残留回调自动变为 no-op
+    std::shared_ptr<HeartBeat> heartBeat_;
+
     std::shared_ptr<EventLoopThreadPool> threadPool_;
 
     TcpConnetionCb connectionCb_;
@@ -71,9 +76,6 @@ private:
     std::atomic<int32_t> started_;
 
     int nextConnId_;
-
-    //心跳检测
-    std::unique_ptr<HeartBeat> heartBeat_;
 
     ConnectionMap connectionMap_;
 };

@@ -49,7 +49,8 @@ Socket::~Socket() = default;
 
 int Socket::fd() const
 {
-    return *sockfd_ ? *sockfd_ : -1;
+    //先判空再解引用: moved-from Socket 的 sockfd_ 为 nullptr; fd==0 是合法描述符
+    return (sockfd_ && *sockfd_ >= 0) ? *sockfd_ : -1;
 }
 
 bool Socket::getTcpInfo(tcp_info* info) const
@@ -146,7 +147,9 @@ bool Socket::selfConnection(int sockfd)
         return laddr4->sin_port == raddr4->sin_port && laddr4->sin_addr.s_addr == raddr4->sin_addr.s_addr;
     }else if(peerAddr.sin6_family == AF_INET6)
     {
-        return localAddr.sin6_port == peerAddr.sin6_port && ::memcpy(&peerAddr.sin6_addr, &localAddr.sin6_addr, sizeof(localAddr.sin6_addr) == 0);
+        //用 memcmp 比较地址: memcpy 返回目标指针永不为 0, 原写法恒为 false
+        return localAddr.sin6_port == peerAddr.sin6_port
+            && ::memcmp(&peerAddr.sin6_addr, &localAddr.sin6_addr, sizeof(localAddr.sin6_addr)) == 0;
     }else{
         LOG_ERROR << "unknow SOCK_FAMILY";
         return false;

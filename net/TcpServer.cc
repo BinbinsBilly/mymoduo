@@ -20,15 +20,16 @@ namespace net
         ,ipPort_(std::string(localAddr.toIpPort()))
         ,name_(name)
         ,acceptor_(std::make_unique<Acceptor>(loop, localAddr, opt == Option::kReusePort))
+        ,heartBeat_((slots > 0 && timeout > 0) ? std::make_shared<HeartBeat>(loop, slots, timeout) : nullptr)
         ,threadPool_(std::make_shared<EventLoopThreadPool>(loop, name_))
         ,started_(0)
         ,nextConnId_(1)
-        ,heartBeat_((slots > 0 && timeout > 0) ? std::make_unique<HeartBeat>(loop, slots, timeout) : nullptr)
     {
         acceptor_->setNewConnCb([this](Socket&& s, const InetAddress& peer){ this->newConnection(std::move(s), peer); });
         if (heartBeat_) {
             heartBeat_->setRemoveConnectionCb([this](const TcpConnPtr& conn){ this->removeConnection(conn); });
         }
+        if (heartBeat_) { heartBeat_->start(); }
     }
 
     TcpServer::~TcpServer()
@@ -40,8 +41,27 @@ namespace net
            所以用局部变量保留引用, 当离开当前作用域时析构TcpConn对象
            并且使用lambda捕获conn, 能保证conn的生命周期不会早于ioLoop的任务队列执行完成
         */
-        loop_->assertInLoopThread();
         LOG_INFO << "TcpServer::~TcpServer - server " << name_ << " destructing";
+        // acceptor 所有权移交 baseLoop: 在 loop 线程内析构, 保证 channel 摘除的线程亲和
+        // (若 functor 被 quit 丢弃, 会随 pendingFunctors_ 在 loop 线程析构, 顺序由 EventLoop 成员析构顺序保证)
+        if (acceptor_)
+        {
+            std::shared_ptr<Acceptor> acceptor = std::move(acceptor_);
+            loop_->runInLoop([acceptor]() {
+                // ~Acceptor 在 loop 线程执行
+            });
+        }
+        // heartBeat_ 所有权同样移交 baseLoop: ~HeartBeat 需调用 loop_->cancel 取消 tick 定时器,
+        // 若留在主线程按成员序析构(晚于 threadPool_ join), 此时 loop 可能已随 loop 线程退出而销毁,
+        // cancel 将访问悬垂的 EventLoop/TimerQueue; 移交后在 loop 线程内析构可保证 timerQueue_ 存活
+        // (若 functor 被 quit 丢弃, 会随 pendingFunctors_ 在 loop 线程析构, 析构顺序上先于 timerQueue_)
+        if (heartBeat_)
+        {
+            std::shared_ptr<HeartBeat> heartBeat = std::move(heartBeat_);
+            loop_->runInLoop([heartBeat]() {
+                // ~HeartBeat 在 loop 线程执行; TcpConn 侧回调持有 weak_ptr, 析构后自动变为 no-op
+            });
+        }
         for(auto& item : connectionMap_)
         {
             TcpConnPtr conn = item.second;//使用栈上变量增加引用数
@@ -108,11 +128,13 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
     newconn->setMessageCb(messageCb_);
     newconn->setWriteCompleteCb(writeCompleteCb_);
     if (heartBeat_) {
-        newconn->setHeartBeatUpdateCb([this](const TcpConnPtr& conn){
-            this->heartBeat_->update(conn);
+        //捕获weak_ptr而非裸this: TcpServer析构后残留的回调变为no-op, 避免悬垂
+        std::weak_ptr<HeartBeat> weakHb = heartBeat_;
+        newconn->setHeartBeatUpdateCb([weakHb](const TcpConnPtr& conn){
+            if (auto hb = weakHb.lock()) { hb->update(conn); }
         });
-        newconn->setHeartBeatRemoveCb([this](const TcpConnPtr& conn){
-            this->heartBeat_->remove(conn);
+        newconn->setHeartBeatRemoveCb([weakHb](const TcpConnPtr& conn){
+            if (auto hb = weakHb.lock()) { hb->remove(conn); }
         });
     }
     

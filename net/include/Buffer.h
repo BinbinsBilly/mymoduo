@@ -5,7 +5,9 @@
 #include <string_view>
 #include <type_traits>
 #include <cassert>
+#include <cstring>
 #include <cstddef>
+#include <cstdint>
 #include <algorithm>
 
 namespace mymoduo {
@@ -52,9 +54,9 @@ public:
     template<typename T>
     auto retrieveT() noexcept -> std::enable_if_t<mymoduo::net::is_supported_int_type<T>, void>;
     template<typename T>
-    auto readT() noexcept -> std::enable_if_t<mymoduo::net::is_supported_int_type<T>, void>;  // 当前实现返回 void
+    auto readT() noexcept -> std::enable_if_t<mymoduo::net::is_supported_int_type<T>, T>;   // 读取整型（移动读指针）
     template<typename T>
-    auto peekT() const noexcept -> std::enable_if_t<mymoduo::net::is_supported_int_type<T>, void>; // 当前实现返回值但声明为 void
+    auto peekT() const noexcept -> std::enable_if_t<mymoduo::net::is_supported_int_type<T>, T>; // 窥视整型（不移动读指针）
 
     const char* findCRLF() const noexcept;           // 查找 CRLF
     const char* findCRLF(const char* start) const noexcept;
@@ -91,5 +93,31 @@ private:
     size_t writerIndex_;                             // 写指针
 };
 
-} // namespace net 
+//以下整型读写模板定义在头文件中, 避免其他翻译单元实例化时产生 undefined symbol
+template<typename T>
+inline auto Buffer::retrieveT() noexcept -> std::enable_if_t<is_supported_int_type<T>, void>
+{
+    assert(readableBytes() >= sizeof(T));
+    retrieve(sizeof(T));
+}
+
+template<typename T>
+inline auto Buffer::readT() noexcept -> std::enable_if_t<is_supported_int_type<T>, T>
+{
+    T result = peekT<T>();
+    retrieveT<T>();
+    return result;
+}
+
+//后期需要修正字节序问题
+template<typename T>
+inline auto Buffer::peekT() const noexcept -> std::enable_if_t<is_supported_int_type<T>, T>
+{
+    assert(readableBytes() >= sizeof(T));
+    T value{0};
+    ::memcpy(&value, peek(), sizeof(T));
+    return value;
+}
+
+} // namespace net
 } // namespace mymoduo

@@ -1,4 +1,5 @@
 #include "Connector.h"
+#include <chrono>
 #include <future>
 
 namespace mymoduo {
@@ -111,14 +112,19 @@ void Connector::stop() {
 
 void Connector::stopAndWait() {
   connect_ = false;
-  // Synchronously wait for stopInLoop to complete
-  std::promise<void> p;
-  auto f = p.get_future();
-  loop_->runInLoop([self = shared_from_this(), &p]() {
+  // 同步等待 stopInLoop 完成
+  // promise 用 shared_ptr: 超时返回后 functor 仍可能迟到执行, 不能引用栈上对象
+  auto p = std::make_shared<std::promise<void>>();
+  auto f = p->get_future();
+  loop_->runInLoop([self = shared_from_this(), p]() {
     self->stopInLoop();
-    p.set_value();
+    p->set_value();
   });
-  f.wait();
+  // 有界等待: loop 已 quit 时 functor 永不执行, 无界等待会导致 ~TcpClient 死锁
+  if (f.wait_for(std::chrono::seconds(2)) != std::future_status::ready) {
+    LOG_WARN << "Connector::stopAndWait - timeout waiting for loop, loop may "
+                "have stopped";
+  }
 }
 
 void Connector::stopInLoop() {
@@ -221,8 +227,11 @@ void Connector::handleWrite() {
       }
     }
   } else {
-    setState(StateE::kDisconnected);
-    LOG_ERROR << "Connector::handleWrite - not in kConnecting state";
+    // 不改写状态: 连接可能已经通过 handleError 的伪错误事件路径成功建立
+    // (state_ == kConnected), 此时再次触发 POLLOUT 不能把状态污染为
+    // kDisconnected, 仅记录日志并忽略本次事件
+    LOG_WARN << "Connector::handleWrite - not in kConnecting state, ignore "
+                "this event";
   }
 }
 
