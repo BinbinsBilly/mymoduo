@@ -134,7 +134,7 @@ private:
     {
         void operator()(int* fd) noexcept
         {
-            if(*fd >= 0  && fd)
+            if(fd && *fd >= 0)
             {
                 ::close(*fd);
             }
@@ -157,7 +157,7 @@ void Socket::setRecvTimeout(const std::chrono::duration<Rep, Period>& timeout)
         tv.tv_sec = seconds.count();
         tv.tv_usec = microseconds.count();
 
-        ::setsockopt(*sockfd_, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        ::setsockopt(*sockfd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 }
 template<typename Rep, typename Period>

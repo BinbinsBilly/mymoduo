@@ -261,8 +261,10 @@ namespace mymoduo :: net
         if(highWaterMarkCb_)
         {
             decltype(auto) guardThis = shared_from_this();
-            loop_->queueInLoop([this, guardThis, len](){
-                highWaterMarkCb_(guardThis, len);
+            loop_->queueInLoop([guardThis, len](){
+                if(guardThis->highWaterMarkCb_) {
+                    guardThis->highWaterMarkCb_(guardThis, len);
+                }
             });
         }
     }

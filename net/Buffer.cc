@@ -26,23 +26,26 @@ ssize_t Buffer::readFd(int fd, int* savederror)
     //空间不够的时候保留数据
     char extrabuf[65536];
     struct iovec vec[2];
+    //必须先保存 writable: 后续 writerIndex_ 的修改会改变 writeableBytes() 的值,
+    //曾因 append 长度误用修改后的值(n - 0 == n)导致从 extrabuf 栈越界读 + 数据损坏
+    const size_t writable = writeableBytes();
     vec[0].iov_base = writeBegin();
-    vec[0].iov_len = writeableBytes();
+    vec[0].iov_len = writable;
     vec[1].iov_base = extrabuf;
     vec[1].iov_len = sizeof(extrabuf);
-    const int iovec = (writeableBytes() < sizeof(extrabuf)) ? 2 : 1;
+    const int iovec = (writable < sizeof(extrabuf)) ? 2 : 1;
     // readv 会先填满主缓冲区，剩余数据读到额外缓冲区
     const ssize_t n = ::readv(fd, vec, iovec);
     if(n < 0)
     {
         *savederror = errno;
-    }else if (static_cast<size_t>(n) < writeableBytes())
-    {   
+    }else if (static_cast<size_t>(n) <= writable)
+    {
         writerIndex_ += n;
         LOG_DEBUG << "[enough]Buffer::readFd - read " << n << " bytes from fd " << fd;
     }else{
-        writerIndex_  += writeableBytes(); //先写满原有缓冲区
-        append(extrabuf, n - writeableBytes()); //再写入额外缓冲区的数据
+        writerIndex_  += writable; //先写满原有缓冲区
+        append(extrabuf, n - writable); //再写入额外缓冲区的数据
         LOG_DEBUG << "[not enough]Buffer::readFd - read " << n << " bytes from fd " << fd;
     }
     return n;

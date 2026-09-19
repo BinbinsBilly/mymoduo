@@ -1,11 +1,14 @@
 #include "HeartBeat.h"
 #include "EventLoop.h"
+#include "EventLoopThread.h"
 #include "TcpServer.h"
 #include "TcpClient.h"
 #include "socket.h"
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 using namespace mymoduo::net;
 
@@ -122,10 +125,27 @@ static void testDestroyCancelsTickTimer() {
     loop.loop();
 }
 
+// 回归: 跨线程 update 排队的 functor 持有 shared_ptr, HeartBeat 析构后迟到执行不悬垂
+static void test_update_after_destruct_no_uaf() {
+    EventLoopThread loopThread(nullptr, "hb-uaf-loop");
+    mymoduo::net::EventLoop* loop = loopThread.startLoop();
+    {
+        auto hb = std::make_shared<HeartBeat>(loop, 4, 2.0);
+        // 在非 loop 线程调用 update: 内部 queueInLoop 转发
+        hb->update(nullptr);
+        // 立即释放: 排队的 functor 可能在 HeartBeat 析构后才执行
+        // ( nullptr 连接不会真正进入槽位, 但转发 functor 会执行 self->update )
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    loop->quit();
+    std::cout << "[OK] test_update_after_destruct_no_uaf" << std::endl;
+}
+
 int main() {
     mymoduo::Logger::setLogLevel(mymoduo::Logger::LogLevel::ERROR);
     testUpdateTriggersRemoveCallback();
     testDestroyCancelsTickTimer();
+    test_update_after_destruct_no_uaf();
     // testRemoveSuppressesCallback();
     std::cout << "HeartBeat tests passed." << std::endl;
     return 0;

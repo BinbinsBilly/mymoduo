@@ -1,4 +1,5 @@
 #include "TcpServer.h"
+#include <cstdlib>
 
 template<typename T>
 T* CHECK_NOT_NULL(T* ptr)
@@ -8,7 +9,7 @@ T* CHECK_NOT_NULL(T* ptr)
         return ptr;
     }
     LOG_FATAL << "TcpServer::CHECK_NOT_NULL - ptr is nullptr";
-    return nullptr;
+    ::abort();
 }
 namespace mymoduo
 {
@@ -104,9 +105,9 @@ void TcpServer::newConnection(Socket&& connSocket, const InetAddress& peerAddr)
 
     LOG_INFO << "add Connection, conn name = " << connName << "Port = " << ipPort_ ;
     
-    //获取本端地址信息
-    sockaddr_in local;
-    memset(&local, 0, sizeof(local));    
+    //获取本端地址信息: 用 sockaddr_in6 兼容 IPv4/IPv6 监听
+    sockaddr_in6 local;
+    memset(&local, 0, sizeof(local));
     socklen_t socklen = sizeof(local);
     if(::getsockname(connSocket.fd(), (sockaddr*)&local, &socklen) < 0)
     {

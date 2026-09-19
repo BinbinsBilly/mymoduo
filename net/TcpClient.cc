@@ -23,7 +23,11 @@ TcpClient::~TcpClient() {
 
   // Break callback dependency on this object before stopping connector.
   // 防止析构时, 还有连接进入
-  connector_->setConnetionCb(Connector::ConnectorCb{});
+  // 在 loop 线程内清空: 主线程直接清空与 handleWrite 读取 cb 存在数据竞争;
+  // loop 已退出时 functor 不执行, 但彼时亦无事件源会调用 cb, 安全性不受影响
+  loop_->runInLoop([this]() {
+    connector_->setConnetionCb(Connector::ConnectorCb{});
+  });
 
   // Synchronously stop the connector to prevent new connections
   // from being established during destruction (e.g. retry timers).

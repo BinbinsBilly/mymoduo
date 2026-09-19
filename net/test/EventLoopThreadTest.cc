@@ -71,11 +71,21 @@ static void test_destruct_in_loop_thread() {
     std::cout << "[OK] test_destruct_in_loop_thread" << std::endl;
 }
 
+// 回归: 构造后未 startLoop 直接析构不应崩溃(join 未启动线程曾触发断言)
+static void test_destruct_without_start() {
+    {
+        EventLoopThread t(nullptr, "never-started");
+        // 不调用 startLoop, 直接离开作用域析构
+    }
+    std::cout << "[OK] test_destruct_without_start" << std::endl;
+}
+
 int main() {
     test_start_and_callback();
     test_runInLoop_executes();
     test_queueInLoop_order();
     test_destruct_in_loop_thread();
+    test_destruct_without_start();
     std::cout << "[ALL PASS] EventLoopThread tests" << std::endl;
     return 0;
 }

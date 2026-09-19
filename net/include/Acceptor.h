@@ -13,6 +13,7 @@
 #include "EventLoop.h"
 
 #include <functional>
+#include <fcntl.h>
 
 namespace mymoduo
 {
@@ -37,6 +38,7 @@ private:
     EventLoop* loop_;
     Socket acceptSocket_;
     Channel acceptChannel_;
+    int idleFd_;
     bool listenning_;
     NewConnCb cb_;
     

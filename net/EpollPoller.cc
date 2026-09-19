@@ -85,15 +85,11 @@ namespace net
         //新的 和 之前被设置为deleted的都可以加入
         if(status == static_cast<int>(ChannelStatus::New) || status == static_cast<int>(ChannelStatus::Deleted))
         {
-            // LOG_DEBUG << "add new Channel to EpollPoller\n";
-            if(status == static_cast<int>(ChannelStatus::New))
-            {
-                //未加入要添加到channels
-                channels_[fd] = &channel;
-            }
-                //已经在channel中的不重复添加, 只修改status
-                channel.setstatus(ChannelStatus::Added);
-                update(EpollOp::Add, channel);
+            // New 与 Deleted->Add 均回填映射: removeChannel 已将 Deleted 的 fd 从 channels_ 移除,
+            // 重新 Add 不回填会导致 hasChannel 失真
+            channels_[fd] = &channel;
+            channel.setstatus(ChannelStatus::Added);
+            update(EpollOp::Add, channel);
         }
         //存在的 需要判断是否有事可做
         else

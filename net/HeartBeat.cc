@@ -54,8 +54,10 @@ void HeartBeat::update(const TcpConnPtr& newConn)
     if(!loop_->isInLoopThread())
     {
         TcpConnPtr conn = newConn;
-        loop_->queueInLoop([this, conn]() {
-            this->update(conn);
+        // 捕获 shared_from_this 而非裸 this: HeartBeat 可能在 functor 执行前析构(TcpServer 析构移交所有权),
+        // 迟到的 functor 通过自身持有的引用保证对象存活, 消除 use-after-free
+        loop_->queueInLoop([self = shared_from_this(), conn]() {
+            self->update(conn);
         });
         return;
     }
@@ -92,8 +94,9 @@ void HeartBeat::remove(const TcpConnPtr& conn)
     if(!loop_->isInLoopThread())
     {
         TcpConnPtr c = conn;
-        loop_->queueInLoop([this, c]() {
-            this->remove(c);
+        // 同 update: 捕获 shared_from_this 消除析构后悬垂访问
+        loop_->queueInLoop([self = shared_from_this(), c]() {
+            self->remove(c);
         });
         return;
     }

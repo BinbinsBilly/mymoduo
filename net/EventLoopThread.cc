@@ -11,6 +11,10 @@ namespace net
     {}
     EventLoopThread::~EventLoopThread()
     {
+        // 未 startLoop 的线程: thread_ 从未启动, join 会触发断言/terminate, 直接跳过
+        if (!thread_.started()) {
+            return;
+        }
         if (loop_) {
             loop_->quit();   // 退出事件循环
         }

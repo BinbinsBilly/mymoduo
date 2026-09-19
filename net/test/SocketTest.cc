@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <future>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -173,6 +174,55 @@ static void testSelfConnection() {
     client.join();
 }
 
+// 回归: accept 返回的连接 socket 必须为非阻塞 + cloexec
+// (Acceptor::handleRead 现以 ENABLE 参数调用 accept, 此处验证 Socket::accept 同一路径)
+static void test_accept_nonblock_cloexec() {
+    auto serverOpt = Socket::create(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    assert(serverOpt.has_value());
+    auto &server = *serverOpt;
+    server.setNonblock(server.fd());
+    server.setCloseOnExec(server.fd());
+    // 不常用端口, 避免与其他用例冲突
+    InetAddress addr(static_cast<uint16_t>(24567), true, false);
+    bool bound = server.bindaddress(addr);
+    assert(bound);
+    bool listened = server.listen(16);
+    assert(listened);
+
+    // 客户端用阻塞 socket ::connect(监听 fd 非阻塞不影响客户端);
+    // connect 返回 0 即连接已进入 backlog, 经 promise 同步后再在非阻塞监听 fd 上 accept
+    std::promise<void> connected;
+    auto connectedFuture = connected.get_future();
+    std::thread client([&connected]{
+        int cfd = ::socket(AF_INET, SOCK_STREAM, 0);
+        assert(cfd >= 0);
+        struct sockaddr_in saddr{};
+        saddr.sin_family = AF_INET;
+        saddr.sin_port = htons(24567);
+        ::inet_pton(AF_INET, "127.0.0.1", &saddr.sin_addr);
+        int cr = ::connect(cfd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr));
+        assert(cr == 0);
+        connected.set_value();
+        // 保持连接直到 accept 完成
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ::close(cfd);
+    });
+
+    connectedFuture.wait();
+    InetAddress peer;
+    auto connOpt = server.accept(peer, SetNonBlocking::ENABLE, SetCloseOnExec::ENABLE);
+    assert(connOpt.has_value());
+    assert(connOpt->fd() >= 0);
+    int flags = ::fcntl(connOpt->fd(), F_GETFL, 0);
+    assert(flags != -1);
+    assert(flags & O_NONBLOCK);
+    int fdflags = ::fcntl(connOpt->fd(), F_GETFD, 0);
+    assert(fdflags != -1);
+    assert(fdflags & FD_CLOEXEC);
+    std::cout << "[OK] accepted socket is nonblocking + cloexec (fd=" << connOpt->fd() << ")" << '\n';
+    client.join();
+}
+
 int main() {
     testCreate();
     testOptions();
@@ -181,6 +231,7 @@ int main() {
     testTcpInfoString();
     testMovedFromFd();
     testSelfConnection();
+    test_accept_nonblock_cloexec();
     std::cout << "All Socket tests passed." << std::endl;
     return 0;
 }

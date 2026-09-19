@@ -34,36 +34,35 @@ Connector::~Connector() {
   // we should remove channel directly
   Channel *rawChannel = channel_.release(); // release ownership
   if (rawChannel) {
+    // 用 shared_ptr 按值捕获: loop quit 后 functor 被丢弃时,
+    // Channel 随 std::function 析构自动释放, 不再依赖 functor 执行(修复泄漏)
+    std::shared_ptr<Channel> guard(rawChannel);
     int sockfd = rawChannel->fd();
 
-    // Ensure channel is cleaned up properly.
-    // If we are in the loop thread, we disable and remove immediately, but
-    // queue deletion to handle the case where we might be inside a Channel
-    // callback.
     if (loop_ && loop_->isInLoopThread()) {
       if (!rawChannel->isNoneEvent()) {
         rawChannel->disableAll();
       }
       rawChannel->remove();
       ::close(sockfd);
-
-      // Defer deletion to avoid use-after-free if we assume we might be in a
+      // Defer deletion to avoid use-after-free if we might be inside a Channel
       // callback
-      loop_->queueInLoop([rawChannel]() { delete rawChannel; });
+      loop_->queueInLoop([guard]() {
+        // Channel destructs when guard is destroyed
+      });
     } else if (loop_) {
       // If not in loop thread, post the whole cleanup to the loop.
-      loop_->runInLoop([rawChannel, sockfd]() {
-        if (!rawChannel->isNoneEvent()) {
-          rawChannel->disableAll();
+      loop_->runInLoop([guard, sockfd]() {
+        Channel *ch = guard.get();
+        if (!ch->isNoneEvent()) {
+          ch->disableAll();
         }
-        rawChannel->remove();
+        ch->remove();
         ::close(sockfd);
-        delete rawChannel;
       });
     } else {
-      // Loop is gone or null, just delete.
+      // Loop is gone or null: guard 析构时释放 Channel(需先关 fd)
       ::close(sockfd);
-      delete rawChannel;
     }
   }
   LOG_DEBUG << "Connector::~Connector - Connector destructed done";
