@@ -44,8 +44,8 @@
 
 - [x] Task 8: 云端 CI 与提交
   - [x] 8.1 提交到分支 trae/agent-Iv1k76，push 到 origin
-  - [ ] 8.2 `gh run watch` 监控 GitHub Actions 全绿（Release + ASan 矩阵）；失败按日志修复重推直至通过
-  - [ ] 8.3 全绿后合并进 main
+  - [x] 8.2 `gh run watch` 监控 GitHub Actions 全绿（run 35460208506：Release 54s ✓ + ASan+UBSan 58s ✓）
+  - [x] 8.3 全绿后合并进 main（fast-forward 3c3af64，main CI run 35460278516 亦全绿）
 
 # Task Dependencies
 - Task 1–6 相互独立，可并行

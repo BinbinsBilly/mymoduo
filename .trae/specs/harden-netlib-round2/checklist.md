@@ -27,5 +27,5 @@
 - [x] ASan+UBSan 构建下 ctest 与 pingpong_bench（--msg 1MB）无报错
 - [x] pingpong_bench 吞吐无回归（Release msg=64 冒烟 233K ops/s）
 - [x] 修复已 commit 并 push 到 origin
-- [ ] GitHub Actions 云端 CI 全绿（gh 验证）
-- [ ] 合并进 main 且 main CI 全绿
+- [x] GitHub Actions 云端 CI 全绿（gh 验证，run 35460208506）
+- [x] 合并进 main 且 main CI 全绿（run 35460278516）
